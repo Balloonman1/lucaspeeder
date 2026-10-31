@@ -96,19 +96,29 @@ body.touch #touch{display:block}
 body.touch #br{display:none}
 .tgrp{position:absolute;bottom:max(18px,env(safe-area-inset-bottom,0px));display:grid;gap:10px;pointer-events:none}
 #tleft{left:max(14px,env(safe-area-inset-left,0px));grid-template-columns:1fr 1fr}
-#tright{right:max(14px,env(safe-area-inset-right,0px));grid-template-columns:1fr 1fr}
+#tright{right:max(14px,env(safe-area-inset-right,0px));grid-template-columns:1fr 1fr;align-items:end}
 .tbtn{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:68px;height:68px;border-radius:50%;background:rgba(18,10,31,.55);border:2px solid rgba(255,255,255,.35);color:#fff;font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;padding:0;text-transform:none}
 .tbtn.wide{grid-column:span 2;width:146px;border-radius:34px;height:62px}
 .tbtn.big{width:84px;height:84px;font-size:15px}
 .tbtn.on{background:rgba(77,240,224,.45);border-color:#4df0e0}
 .tbtn.go{border-color:var(--good)} .tbtn.tom{border-color:#ff7a5c}
-body.touch #bl{bottom:auto;top:max(14px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);margin-top:62px;padding:6px 12px}
-body.touch #speed{font-size:20px}
-body.touch #tl{padding:8px 10px;min-width:0}
-body.touch .big{font-size:18px}
-body.touch #gps{padding:6px 12px}
-body.touch #msgs{bottom:auto;top:max(14px,env(safe-area-inset-top,0px));margin-top:118px;width:min(60vw,420px)}
-body.touch #spect{top:40%}
+body.touch{touch-action:none}
+body.touch #bl{display:none}
+body.touch #tl{padding:6px 10px;min-width:0;max-width:240px}
+body.touch #tl .lbl{font-size:8px;letter-spacing:.12em}
+body.touch #energyBar{height:9px;margin:2px 0 5px}
+body.touch .row{gap:10px}
+body.touch .big{font-size:14px}
+body.touch #tr{padding:4px}
+body.touch #map{width:84px;height:84px}
+body.touch #gps{padding:4px 10px;gap:8px}
+body.touch #arrow{width:24px;height:24px}
+body.touch #gpsText{font-size:11px}
+body.touch #gpsText small{font-size:8px}
+body.touch #msgs{bottom:auto;top:max(14px,env(safe-area-inset-top,0px));margin-top:48px;width:min(48vw,380px);gap:4px}
+body.touch .msg{font-size:12px;padding:4px 12px}
+body.touch #spect{top:auto;bottom:max(18px,env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);font-size:11px;padding:6px 12px;width:min(34vw,260px)}
+body.touch #splat div{font-size:20px}
 #rotate{position:fixed;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:rgba(10,4,20,.92);text-align:center;font-family:var(--display);font-size:18px;padding:20px}
 body.touch.portrait.playing #rotate{display:flex}
 @media (max-width:640px){#tr{display:none}#tl{min-width:0}.big{font-size:20px}.keys{grid-template-columns:auto 1fr}}
@@ -148,8 +158,7 @@ body.touch.portrait.playing #rotate{display:flex}
   </div>
   <div class="tgrp" id="tright">
     <button class="tbtn tom" data-key="f" aria-label="Throw tomato">🍅</button>
-    <button class="tbtn" data-key=" " aria-label="Jump">JUMP</button>
-    <button class="tbtn wide go" data-key="w" aria-label="Go">GO</button>
+    <button class="tbtn big" data-key=" " aria-label="Jump">JUMP</button>
   </div>
 </div>
 <div id="rotate">Turn your phone sideways to ride 🔄</div>
@@ -170,7 +179,7 @@ body.touch.portrait.playing #rotate{display:flex}
     <kbd>SPACE</kbd><span>Jump over rocks</span>
     <kbd>F</kbd><span>Throw tomato</span>
   </div>
-  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. Left thumb steers, right thumb has GO, JUMP and the tomato.</p>
+  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. The bike drives itself. Left thumb steers and brakes, right thumb jumps and throws tomatoes.</p>
   <p class="tips">Energy drains every second. Follow the <b>GPS</b> to food. <b>Energy drinks</b> double your speed. <b>Cherries</b> clone you with a helper rider. <b>Tomatoes</b> aren't for eating: throw one at a rival and their GPS goes dark for 10 seconds. Run out of energy and you're out. <b>Last one alive wins.</b> Races last 5 minutes at most; if the clock runs out, the rider with the most energy wins.</p>
   <h2>Play</h2>
   <div class="btns">
@@ -502,7 +511,7 @@ function hostSim(dt){
   if((alive.length<=1 || left<=0) && !G.over){ G.over=true; const rest=alive.slice().sort((a,b)=>a.energy-b.energy); for(const r of rest){ r.survived=G.t; G.elim.unshift(r.id); } G.standings=G.elim.map(id=>({id, name:G.ents[id].name, bot:!!G.ents[id].bot, t:Math.floor(G.ents[id].survived)}));
     if(net.host) net.broadcast({t:'over', standings:G.standings}); showOver(); }
 }
-function keys2input(){ return {fwd:keys['w']||keys['arrowup'], back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:keys[' ']}; }
+function keys2input(){ return {fwd:keys['w']||keys['arrowup']||(isTouch && !keys['s']), back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:keys[' ']}; }
 
 // ---------- snapshots ----------
 function snapshot(){
