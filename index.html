@@ -171,7 +171,7 @@ ol.stand b{color:var(--good)}
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.5/mqtt.min.js"></script>
 <script>
 (function(){
 const T = THREE;
@@ -486,58 +486,75 @@ function applySnapshot(s, forId){
   for(const m of s.msgs) if(m.to==='all'||m.to===forId) showMsg(m.text, m.cls);
 }
 
-// ---------- networking (PeerJS, host-authoritative) ----------
-const net = { host:false, online:false, peer:null, conns:{}, hostConn:null, lobby:[], nextId:1 };
-function roomId(code){ return 'speeder-forager-veyra9-'+code; }
-const PEER_OPTS = { debug:0, config:{ iceServers:[
-  {urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun1.l.google.com:19302'},
-  {urls:'turn:openrelay.metered.ca:80', username:'openrelayproject', credential:'openrelayproject'},
-  {urls:'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
-  {urls:'turn:openrelay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject'} ] } };
+// ---------- networking (public MQTT relay over WebSocket, host-authoritative) ----------
+const net = { host:false, online:false, client:null, code:'', myId:null, lobby:[], nextId:1, seen:{}, lastSnap:0 };
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+const topic = (code, sub) => 'speeder-forager/veyra9/'+code+'/'+sub;
 function randomCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ'; let s=''; for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
-function peerFail(err){ $('startErr').textContent = 'Online play failed: '+(err&&err.type||'connection blocked')+'. Solo mode still works.'; $('hostBtn').disabled=$('joinBtn').disabled=false; if(net.peer){ try{ net.peer.destroy(); }catch(e){} net.peer=null; } net.online=false; }
+function peerFail(err){ $('startErr').textContent = 'Online play failed: '+(err&&err.type||'connection blocked')+'. Solo mode still works.'; $('hostBtn').disabled=$('joinBtn').disabled=false; closeNet(); }
+function closeNet(){ if(net.client){ try{ net.client.end(true); }catch(e){} } net.client=null; net.online=false; net.host=false; net.lobby=[]; net.seen={}; }
+function connectBroker(onReady){
+  let i=0;
+  function tryNext(){
+    if(i>=BROKERS.length){ peerFail({type:'could not reach any relay server'}); return; }
+    const url=BROKERS[i++]; $('startErr').textContent='Connecting to relay '+i+' of '+BROKERS.length+'...';
+    let c; try{ c=mqtt.connect(url, {connectTimeout:7000, reconnectPeriod:2000, keepalive:20, clean:true}); }catch(e){ tryNext(); return; }
+    let ok=false;
+    c.on('connect', ()=>{ if(ok) return; ok=true; net.client=c; $('startErr').textContent=''; onReady(c); });
+    c.on('error', ()=>{ if(!ok){ try{ c.end(true); }catch(e){} tryNext(); } });
+    c.on('close', ()=>{ if(!ok){ /* handled by error/timeout */ } else if(G && !G.over) showMsg('Relay connection dropped, reconnecting...','bad'); });
+    setTimeout(()=>{ if(!ok){ try{ c.end(true); }catch(e){} tryNext(); } }, 8000);
+  }
+  tryNext();
+}
+function publish(sub, m){ if(!net.client) return; try{ net.client.publish(topic(net.code, sub), JSON.stringify(m), {qos:0}); }catch(e){} }
+net.broadcast = m => publish('all', m);
+net.sendTo = (id, m) => publish('c/'+id, m);
+net.sendHost = m => publish('h', Object.assign({from:net.myId}, m));
 function hostRoom(){
-  const code=randomCode(); $('hostBtn').disabled=$('joinBtn').disabled=true; $('startErr').textContent='Opening room...';
-  let peer; try{ peer=new Peer(roomId(code), PEER_OPTS); }catch(e){ peerFail(e); return; }
-  setTimeout(()=>{ if(!peer.open && !G && net.peer===peer){ peerFail({type:'matchmaking service unreachable'}); } }, 12000);
-  net.peer=peer; net.host=true; net.online=true; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}];
-  peer.on('open', ()=>{ $('startErr').textContent=''; showRoom(code); });
-  peer.on('error', e=>{ if(!G){ peerFail(e); net.online=false; } });
-  peer.on('connection', c=>{
-    c.on('data', d=>hostOnMsg(c,d));
-    c.on('close', ()=>{ const id=c._pid; if(!id) return; delete net.conns[id]; net.lobby=net.lobby.filter(p=>p.id!==id);
-      if(G && G.ents[id]){ G.ents[id].alive=false; msg(G.ents[id].name+' left the race','bad','all'); } else renderLobby(); net.broadcast({t:'lobby', players:net.lobby}); });
+  const code=randomCode(); $('hostBtn').disabled=$('joinBtn').disabled=true;
+  if(typeof mqtt==='undefined'){ peerFail({type:'relay library blocked on this page'}); return; }
+  net.code=code; net.host=true; net.online=true; net.myId='p0'; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}];
+  connectBroker(c=>{
+    c.subscribe(topic(code,'h'), {qos:0});
+    c.on('message', (tp, payload)=>{ let d; try{ d=JSON.parse(payload.toString()); }catch(e){ return; } if(d && d.from) hostOnMsg(d); });
+    showRoom(code);
+    net.pingTimer = setInterval(()=>{ // drop riders who went quiet
+      const now=performance.now(); for(const id in net.seen){ if(now-net.seen[id]>9000){ delete net.seen[id]; net.lobby=net.lobby.filter(p=>p.id!==id);
+        if(G && G.ents[id] && G.ents[id].alive){ G.ents[id].alive=false; msg(G.ents[id].name+' lost connection','bad','all'); } else renderLobby(); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } }
+      if(!G) net.broadcast({t:'lobby', players:net.lobby, code:net.code});
+    }, 2000);
   });
 }
 function joinRoom(code){
-  $('hostBtn').disabled=$('joinBtn').disabled=true; $('startErr').textContent='Joining '+code+'...';
-  let peer; try{ peer=new Peer(undefined, PEER_OPTS); }catch(e){ peerFail(e); return; }
-  setTimeout(()=>{ if(!peer.open && !G && net.peer===peer){ peerFail({type:'matchmaking service unreachable'}); } }, 12000);
-  net.peer=peer; net.host=false; net.online=true;
-  peer.on('error', e=>{ if(!G){ peerFail(e && e.type==='peer-unavailable' ? {type:'no room with code '+code+' is open right now'} : e); net.online=false; } else { showMsg('Connection lost','bad'); } });
-  peer.on('open', ()=>{
-    const c=peer.connect(roomId(code), {reliable:true}); net.hostConn=c;
-    c.on('open', ()=>{ c.send({t:'join', name:me.name, color:me.color, hat:me.hat}); });
-    c.on('data', d=>clientOnMsg(d));
-    c.on('close', ()=>{ if(G && !G.over){ showMsg('Host left the room','bad'); } net.online=false; });
-    $('startErr').textContent='Found the matchmaking service, connecting to the host...';
-    setTimeout(()=>{ if(!c.open && !G && net.hostConn===c){ peerFail({type:'the host was found but no connection could be made in 20 seconds. Both players must be on the website version, and some school or work networks block this. Try a phone hotspot'}); } }, 20000);
+  $('hostBtn').disabled=$('joinBtn').disabled=true;
+  if(typeof mqtt==='undefined'){ peerFail({type:'relay library blocked on this page'}); return; }
+  net.code=code; net.host=false; net.online=true; net.myId='p'+Math.random().toString(36).slice(2,8);
+  connectBroker(c=>{
+    c.subscribe([topic(code,'all'), topic(code,'c/'+net.myId)], {qos:0});
+    c.on('message', (tp, payload)=>{ let d; try{ d=JSON.parse(payload.toString()); }catch(e){ return; } clientOnMsg(d); });
+    $('startErr').textContent='Relay connected. Looking for room '+code+'...';
+    let tries=0; net.joinTimer=setInterval(()=>{ if(net.welcomed){ clearInterval(net.joinTimer); return; } if(++tries>8){ clearInterval(net.joinTimer); peerFail({type:'no open room with code '+code+'. Check the code and make sure the host is still on the lobby screen'}); return; }
+      net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat}); }, 1000);
+    net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat});
+    net.hbTimer=setInterval(()=>{ if(net.welcomed && net.online){ net.sendHost({t:'hb'}); if(G && !G.over && performance.now()-net.lastSnap>9000){ showMsg('Lost the host','bad'); net.lastSnap=performance.now(); } } }, 2000);
   });
 }
-net.broadcast = m => { for(const id in net.conns){ try{ net.conns[id].send(m); }catch(e){} } };
-function hostOnMsg(c, d){
-  if(d.t==='join'){ if(net.lobby.length>=MAX_PLAYERS || G){ c.send({t:'full'}); return; } const id='p'+(net.nextId++); c._pid=id; net.conns[id]=c;
-    net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat}); c.send({t:'welcome', id}); net.broadcast({t:'lobby', players:net.lobby}); renderLobby(); return; }
-  if(!G) return; const e=G.ents[c._pid]; if(!e) return;
+function hostOnMsg(d){
+  const id=d.from; net.seen[id]=performance.now();
+  if(d.t==='join'){ if(net.lobby.some(p=>p.id===id)){ net.sendTo(id,{t:'welcome', id, code:net.code}); return; }
+    if(net.lobby.length>=MAX_PLAYERS || G){ net.sendTo(id,{t:'full'}); return; }
+    net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat}); net.sendTo(id,{t:'welcome', id, code:net.code}); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); renderLobby(); return; }
+  if(!G) return; const e=G.ents[id]; if(!e) return;
   if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; } }
   else if(d.t==='throw'){ if(e.alive && e.tomatoes>0) hostThrow(e); }
 }
 function clientOnMsg(d){
-  if(d.t==='welcome'){ net.myId=d.id; $('startErr').textContent=''; }
-  else if(d.t==='full'){ peerFail({type:'room is full or already racing'}); }
-  else if(d.t==='lobby'){ net.lobby=d.players; showRoom(d.code||$('codeIn').value.toUpperCase()); renderLobby(); }
-  else if(d.t==='start'){ startMatch(d.seed, false, d.players, d.items); }
-  else if(d.t==='snap'){ if(G) applySnapshot(d, G.localId); }
+  if(d.t==='welcome'){ net.welcomed=true; $('startErr').textContent=''; showRoom(d.code||net.code); }
+  else if(d.t==='full'){ if(!net.welcomed) peerFail({type:'room is full or already racing'}); }
+  else if(d.t==='lobby'){ if(!net.welcomed) return; net.lobby=d.players; if(!G) showRoom(d.code||net.code); renderLobby(); }
+  else if(d.t==='start'){ if(net.welcomed) startMatch(d.seed, false, d.players, d.items); }
+  else if(d.t==='snap'){ if(G){ net.lastSnap=performance.now(); applySnapshot(d, G.localId); } }
   else if(d.t==='over'){ if(G){ G.over=true; G.standings=d.standings; showOver(); } }
 }
 
@@ -548,7 +565,7 @@ function renderLobby(){ const box=$('plist'); box.innerHTML='';
   const list=[...net.lobby]; while(list.length<MAX_PLAYERS) list.push({bot:true, name:'Bot seat', color:'#555'});
   for(const p of list){ const d=document.createElement('div'); d.className='pl'; d.innerHTML='<i style="background:'+p.color+'"></i>'+(p.bot?'<small>Bot seat</small>':'<span></span>'); if(!p.bot){ d.querySelector('span').textContent=p.name+(p.id==='p0'?' (host)':''); } box.appendChild(d); }
 }
-function leaveRoom(){ if(net.peer){ try{ net.peer.destroy(); }catch(e){} } net.peer=null; net.conns={}; net.hostConn=null; net.online=false; net.host=false; net.lobby=[];
+function leaveRoom(){ clearInterval(net.pingTimer); clearInterval(net.joinTimer); clearInterval(net.hbTimer); net.welcomed=false; closeNet();
   $('room').style.display='none'; $('start').style.display='flex'; $('hostBtn').disabled=$('joinBtn').disabled=false; }
 
 // ---------- match start / end ----------
@@ -639,8 +656,8 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now-lastFrame)/1000 || 0); lastFrame=now;
   if(G && G.running && !paused){
-    if(G.isHost){ const steps = humansAlive().length===0 && !G.over ? 6 : 1; for(let i=0;i<steps;i++) hostSim(dt); if(net.online){ G.sendAcc+=dt; if(G.sendAcc>=0.05){ G.sendAcc=0; net.broadcast(snapshot()); } } }
-    else { const e=G.ents[G.localId]; if(e&&e.alive){ movePhysics(e, keys2input(), dt); G.sendAcc+=dt; if(G.sendAcc>=0.05 && net.hostConn){ G.sendAcc=0; try{ net.hostConn.send({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes}); e.crashes=0; }catch(err){} } } }
+    if(G.isHost){ const steps = humansAlive().length===0 && !G.over ? 6 : 1; for(let i=0;i<steps;i++) hostSim(dt); if(net.online){ G.sendAcc+=dt; if(G.sendAcc>=0.067){ G.sendAcc=0; net.broadcast(snapshot()); } } }
+    else { const e=G.ents[G.localId]; if(e&&e.alive){ movePhysics(e, keys2input(), dt); G.sendAcc+=dt; if(G.sendAcc>=0.067 && net.online){ G.sendAcc=0; try{ net.sendHost({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes}); e.crashes=0; }catch(err){} } } }
     renderEnts(dt);
     let view = G.ents[G.localId];
     if(!view || !view.alive){ if(!G.spectate || !G.ents[G.spectate] || !G.ents[G.spectate].alive){ const a=aliveRiders(); G.spectate = a.length? a[0].id : null; } view = G.spectate? G.ents[G.spectate] : view;
@@ -656,7 +673,7 @@ addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true;
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
   if(k==='p' && !net.online){ paused=!paused; $('pause').style.display=paused?'flex':'none'; if(!paused) lastFrame=performance.now(); }
-  if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.hostConn) net.hostConn.send({t:'throw'}); } }
+  if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.online) net.sendHost({t:'throw'}); } }
   if(k==='tab'){ const a=aliveRiders(); if(a.length){ const i=a.findIndex(x=>x.id===G.spectate); G.spectate=a[(i+1)%a.length].id; } } });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
 $('resumeBtn').onclick=()=>{ paused=false; $('pause').style.display='none'; lastFrame=performance.now(); };
@@ -671,8 +688,8 @@ function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike
   const hb=$('hats'); Object.entries(HATS).forEach(([k,v])=>{ const b=document.createElement('button'); b.className='hat'+(k===me.hat?' on':''); b.textContent=v; b.onclick=()=>{ me.hat=k; [...hb.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; hb.appendChild(b); });
   refreshPreview();
   $('soloBtn').onclick=()=>{ saveMe(); net.online=false; net.host=false; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}]; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
-  $('hostBtn').onclick=()=>{ saveMe(); if(typeof Peer==='undefined'){ peerFail({type:'network library blocked'}); return; } hostRoom(); };
-  $('joinBtn').onclick=()=>{ saveMe(); const code=$('codeIn').value.trim().toUpperCase(); if(code.length!==4){ $('startErr').textContent='Enter the 4-letter room code.'; return; } if(typeof Peer==='undefined'){ peerFail({type:'network library blocked'}); return; } joinRoom(code); };
+  $('hostBtn').onclick=()=>{ saveMe(); hostRoom(); };
+  $('joinBtn').onclick=()=>{ saveMe(); const code=$('codeIn').value.trim().toUpperCase(); if(code.length!==4){ $('startErr').textContent='Enter the 4-letter room code.'; return; } joinRoom(code); };
   $('startBtn').onclick=()=>{ if(!net.host) return; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
   $('leaveBtn').onclick=leaveRoom;
   $('againBtn').onclick=()=>{ $('over').style.display='none'; clearWorld(); G=null; refreshPreview(); if(net.online && net.host){ showRoom(net.code); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } else if(net.online){ showRoom(net.code); } else { $('start').style.display='flex'; } };
