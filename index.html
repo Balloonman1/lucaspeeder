@@ -82,7 +82,7 @@ button:focus-visible{outline:3px solid #fff;outline-offset:3px}
   <svg id="arrow" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3 L33 33 L20 25 L7 33 Z" fill="#4df0e0"/></svg>
   <div id="gpsText"><small>GPS · nearest food</small><span id="gpsName">scanning</span></div>
 </div>
-<div id="bl" class="hud panel"><div id="speed">0 <span>KM/H</span></div><div id="boost">⚡ TURBO 0.0s</div></div>
+<div id="bl" class="hud panel"><div id="speed">0 <span>KM/H</span></div><div id="boost">⚡ TURBO 0.0s</div><div class="lbl" id="clock" style="margin-top:6px">☀ Sunrise</div></div>
 <div id="br" class="hud panel">W/S drive · A/D steer · SPACE jump · P pause</div>
 <div id="msgs" class="hud"></div>
 
@@ -159,16 +159,43 @@ function terrainH(x, z){
   scene.add(grid);
 })();
 
-// sky dressing: moons and stars (not fogged)
-(function sky(){
-  const m1 = new T.Mesh(new T.SphereGeometry(26, 24, 24), new T.MeshBasicMaterial({color:0xffc2ec, fog:false}));
-  m1.position.set(-300, 160, -500); scene.add(m1);
+// sky dressing: sun, moons and stars (not fogged). The sun and big moon orbit; a full day lasts DAY_LEN seconds.
+const DAY_LEN = 150;
+const sky = {};
+(function buildSky(){
+  sky.sun = new T.Mesh(new T.SphereGeometry(34, 24, 24), new T.MeshBasicMaterial({color:0xfff1b0, fog:false})); scene.add(sky.sun);
+  sky.halo = new T.Mesh(new T.SphereGeometry(52, 24, 24), new T.MeshBasicMaterial({color:0xffa04d, fog:false, transparent:true, opacity:.25})); scene.add(sky.halo);
+  sky.moon = new T.Mesh(new T.SphereGeometry(26, 24, 24), new T.MeshBasicMaterial({color:0xffc2ec, fog:false})); scene.add(sky.moon);
   const m2 = new T.Mesh(new T.SphereGeometry(12, 24, 24), new T.MeshBasicMaterial({color:0x9ef5ff, fog:false}));
-  m2.position.set(260, 220, -480); scene.add(m2);
+  m2.position.set(260, 220, -480); scene.add(m2); sky.moon2 = m2;
   const pts = []; for(let i=0;i<700;i++){ const r=800, th=Math.random()*Math.PI*2, ph=Math.random()*Math.PI*0.45; pts.push(r*Math.cos(th)*Math.cos(ph), r*Math.sin(ph)+40, r*Math.sin(th)*Math.cos(ph)); }
   const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(pts,3));
-  scene.add(new T.Points(sg, new T.PointsMaterial({color:0xffffff, size:2, sizeAttenuation:false, fog:false})));
+  sky.stars = new T.Points(sg, new T.PointsMaterial({color:0xffffff, size:2, sizeAttenuation:false, fog:false, transparent:true, opacity:1})); scene.add(sky.stars);
+  sky.day = new T.Color(0xff8ab0);   // alien daytime sky
+  sky.dusk = new T.Color(0xff6a3d);  // sunrise and sunset
+  sky.night = new T.Color(0x2a0f4a); // night
 })();
+function updateSky(clock){
+  // clock runs 0..1; 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset
+  // sun rises in the east (x>0) at clock .25, peaks at .5, sets at .75
+  const sunY = Math.sin((clock-0.25)*Math.PI*2);
+  const sunX = -Math.cos((clock-0.25)*Math.PI*2);
+  sky.sun.position.set(sunX*600, sunY*380+20, -520); sky.halo.position.copy(sky.sun.position);
+  sky.moon.position.set(-sunX*600, -sunY*380+20, -520);
+  sky.sun.visible = sky.halo.visible = sunY > -0.12; sky.moon.visible = sunY < 0.12;
+  const daylight = T.MathUtils.clamp(sunY*2.2, 0, 1);            // 0 night, 1 full day
+  const duskness = T.MathUtils.clamp(1-Math.abs(sunY)*3.5, 0, 1); // peaks at horizon
+  const col = sky.night.clone().lerp(sky.day, daylight).lerp(sky.dusk, duskness*0.75);
+  scene.background.copy(col); scene.fog.color.copy(col);
+  scene.fog.near = 70 + daylight*40; scene.fog.far = 260 + daylight*120;
+  sun.intensity = 0.25 + daylight*1.0; hemi.intensity = 0.45 + daylight*0.5;
+  sun.color.setHex(daylight>0.5?0xfff2d6:0xffb080);
+  sun.position.set(sunX*120, Math.max(40, sunY*180), -60);
+  sky.stars.material.opacity = 1-daylight;
+  sky.moon2.material.color.setHex(daylight>0.5?0xd6fbff:0x9ef5ff);
+  sky.moon2.visible = daylight < 0.9;
+  return daylight;
+}
 
 // ---------- helpers ----------
 const rand = (a,b)=>a+Math.random()*(b-a);
@@ -424,6 +451,11 @@ function update(dt){
     ring.visible=true; ring.position.set(target.x, terrainH(target.x,target.z)+0.3, target.z); ring.scale.setScalar(1+Math.sin(t*4)*0.12);
   } else { route.visible=false; ring.visible=false; $('gpsName').textContent='scanning'; }
 
+  // day / night
+  const clock = (0.22 + t/DAY_LEN) % 1;
+  const daylight = updateSky(clock);
+  const phase = clock<0.2?'🌙 Night':clock<0.3?'🌅 Sunrise':clock<0.45?'☀ Morning':clock<0.55?'☀ Noon':clock<0.7?'☀ Afternoon':clock<0.8?'🌇 Sunset':'🌙 Night';
+  $('clock').textContent = phase + ' · day ' + (Math.floor((t/DAY_LEN)+0.22)+1);
   // HUD
   const ef=$('energyFill'); ef.style.width=Math.max(0,player.energy)+'%'; ef.classList.toggle('low', player.energy<30);
   $('time').textContent=Math.floor(t)+'s'; $('food').textContent=foodEaten;
@@ -461,6 +493,7 @@ function loop(now){
   if(running && !paused) update(dt);
   else if(!running){ // idle camera orbit on menus
     const a=now*0.00015; camera.position.set(Math.sin(a)*22, 9, Math.cos(a)*22); camera.lookAt(0,1,0);
+    updateSky((0.3 + now/1000/DAY_LEN) % 1);
     if(player.mesh){ player.mesh.position.y=terrainH(0,0)+0.9+Math.sin(now*0.004)*0.08; }
   }
   renderer.render(scene, camera);
