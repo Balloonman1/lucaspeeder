@@ -733,7 +733,7 @@ if(isTouch){ document.body.classList.add('touch'); $('touchTip').style.display='
       else if(!left && !rt){ rt={id:t.identifier, t0:performance.now(), x:t.clientX, y:t.clientY, braking:false}; place(fx,t.clientX,t.clientY); fx.className=''; fx.style.display='block';
         rt.timer=setTimeout(()=>{ if(rt && rt.id===t.identifier){ rt.braking=true; touch.brake=true; fx.className='brake'; } }, 180); } } }
   function onMove(e){ e.preventDefault();
-    for(const t of e.changedTouches){ if(lt && t.identifier===lt.id){ const dx=T.MathUtils.clamp(t.clientX-lt.x0,-40,40); touch.steer = dx/40; knob.style.transform='translate('+dx+'px,0)'; } } }
+    for(const t of e.changedTouches){ if(lt && t.identifier===lt.id){ const dx=T.MathUtils.clamp(t.clientX-lt.x0,-40,40); touch.steer = -dx/40; knob.style.transform='translate('+dx+'px,0)'; } } }
   function onEnd(e){ e.preventDefault();
     for(const t of e.changedTouches){
       if(lt && t.identifier===lt.id){ lt=null; touch.steer=0; stick.style.display='none'; }
