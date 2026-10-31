@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Speeder Forager</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Exo+2:wght@400;600;700&display=swap">
 <style>
@@ -18,7 +20,7 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden;
   padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
-#game{position:fixed;inset:0;display:block;width:100%;height:100%}
+#game{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none}
 .hud{position:fixed;pointer-events:none;font-variant-numeric:tabular-nums}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;backdrop-filter:blur(6px)}
 #tl{top:max(14px,env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));padding:12px 14px;min-width:250px}
@@ -89,7 +91,28 @@ ol.stand{margin:0 0 16px;padding-left:22px;font-size:15px;line-height:1.7}
 ol.stand b{color:var(--good)}
 #pause,#room,#over{display:none}
 .err{color:var(--bad);font-size:13px;min-height:1.2em;margin:6px 0 0}
+#touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:3}
+body.touch #touch{display:block}
+body.touch #br{display:none}
+.tgrp{position:absolute;bottom:max(18px,env(safe-area-inset-bottom,0px));display:grid;gap:10px;pointer-events:none}
+#tleft{left:max(14px,env(safe-area-inset-left,0px));grid-template-columns:1fr 1fr}
+#tright{right:max(14px,env(safe-area-inset-right,0px));grid-template-columns:1fr 1fr}
+.tbtn{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:68px;height:68px;border-radius:50%;background:rgba(18,10,31,.55);border:2px solid rgba(255,255,255,.35);color:#fff;font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;padding:0;text-transform:none}
+.tbtn.wide{grid-column:span 2;width:146px;border-radius:34px;height:62px}
+.tbtn.big{width:84px;height:84px;font-size:15px}
+.tbtn.on{background:rgba(77,240,224,.45);border-color:#4df0e0}
+.tbtn.go{border-color:var(--good)} .tbtn.tom{border-color:#ff7a5c}
+body.touch #bl{bottom:auto;top:max(14px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);margin-top:62px;padding:6px 12px}
+body.touch #speed{font-size:20px}
+body.touch #tl{padding:8px 10px;min-width:0}
+body.touch .big{font-size:18px}
+body.touch #gps{padding:6px 12px}
+body.touch #msgs{bottom:auto;top:max(14px,env(safe-area-inset-top,0px));margin-top:118px;width:min(60vw,420px)}
+body.touch #spect{top:40%}
+#rotate{position:fixed;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:rgba(10,4,20,.92);text-align:center;font-family:var(--display);font-size:18px;padding:20px}
+body.touch.portrait.playing #rotate{display:flex}
 @media (max-width:640px){#tr{display:none}#tl{min-width:0}.big{font-size:20px}.keys{grid-template-columns:auto 1fr}}
+@media (max-height:420px){.tbtn{width:56px;height:56px;font-size:11px}.tbtn.big{width:70px;height:70px}.tbtn.wide{width:122px;height:52px}}
 @media (prefers-reduced-motion:reduce){.msg{animation:none}}
 </style>
 </head>
@@ -115,8 +138,21 @@ ol.stand b{color:var(--good)}
 </div>
 <div id="bl" class="hud panel"><div id="speed">0 <span>KM/H</span></div><div id="boost">⚡ TURBO 0.0s</div><div class="lbl" id="clock" style="margin-top:6px">☀ Sunrise</div></div>
 <div id="br" class="hud panel">W/S drive · A/D steer · SPACE jump<br>F throw tomato · TAB spectate</div>
-<div id="spect" class="hud panel">YOU'RE OUT · spectating <span id="spectName"></span><br><small style="color:var(--dim)">TAB switches rider</small></div>
+<div id="spect" class="hud panel">YOU'RE OUT · spectating <span id="spectName"></span><br><small style="color:var(--dim)">TAB or tap here to switch rider</small></div>
 <div id="msgs" class="hud"></div>
+<div id="touch">
+  <div class="tgrp" id="tleft">
+    <button class="tbtn big" data-key="a" aria-label="Steer left">◀</button>
+    <button class="tbtn big" data-key="d" aria-label="Steer right">▶</button>
+    <button class="tbtn wide" data-key="s" aria-label="Brake and reverse">BRAKE / REV</button>
+  </div>
+  <div class="tgrp" id="tright">
+    <button class="tbtn tom" data-key="f" aria-label="Throw tomato">🍅</button>
+    <button class="tbtn" data-key=" " aria-label="Jump">JUMP</button>
+    <button class="tbtn wide go" data-key="w" aria-label="Go">GO</button>
+  </div>
+</div>
+<div id="rotate">Turn your phone sideways to ride 🔄</div>
 
 <div id="start" class="overlay"><div class="card">
   <h1>Speeder Forager</h1>
@@ -134,6 +170,7 @@ ol.stand b{color:var(--good)}
     <kbd>SPACE</kbd><span>Jump over rocks</span>
     <kbd>F</kbd><span>Throw tomato</span>
   </div>
+  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. Left thumb steers, right thumb has GO, JUMP and the tomato.</p>
   <p class="tips">Energy drains every second. Follow the <b>GPS</b> to food. <b>Energy drinks</b> double your speed. <b>Cherries</b> clone you with a helper rider. <b>Tomatoes</b> aren't for eating: throw one at a rival and their GPS goes dark for 10 seconds. Run out of energy and you're out. <b>Last one alive wins.</b> Races last 5 minutes at most; if the clock runs out, the rider with the most energy wins.</p>
   <h2>Play</h2>
   <div class="btns">
@@ -579,7 +616,7 @@ function startMatch(seed, isHost, players, itemList){
   if(isHost){ for(let i=0;i<18;i++) hostSpawnItem('food', FOOD_KEYS[i%FOOD_KEYS.length]); hostSpawnItem('drink'); hostSpawnItem('drink'); hostSpawnItem('cherry'); for(let i=0;i<4;i++) hostSpawnItem('tomato');
     if(net.online) net.broadcast({t:'start', seed, players, items:G.items.map(it=>({kind:it.kind,type:it.type,x:it.x,z:it.z}))}); }
   else { itemList.forEach((it,i)=>{ const o={id:i, kind:it.kind, type:it.type, x:it.x, z:it.z, alive:true, phase:Math.random()*6}; o.mesh=itemMesh(o); G.items.push(o); }); }
-  lastFrame=performance.now();
+  lastFrame=performance.now(); document.body.classList.add('playing');
 }
 function buildPlayerList(){
   const used=new Set(net.lobby.map(p=>p.name)); const list=net.lobby.map(p=>Object.assign({},p));
@@ -593,7 +630,7 @@ function showOver(){
   $('overSub').textContent = place===1 ? 'Last rider with energy on Veyra-9.' : 'You placed #'+place+' of '+G.standings.length+'.';
   $('oTime').textContent=Math.floor(meE?meE.survived:0)+'s'; $('oFood').textContent=meE?meE.foodEaten:0; $('oPlace').textContent='#'+place;
   const ol=$('standings'); ol.innerHTML=''; G.standings.forEach((s,i)=>{ const li=document.createElement('li'); li.innerHTML=(i===0?'<b></b>':'<span></span>')+' <small style="color:var(--dim)"></small>'; li.firstChild.textContent=s.name+(s.id===G.localId?' (you)':''); li.lastChild.textContent=(s.bot?'bot · ':'')+s.t+'s'; ol.appendChild(li); });
-  $('over').style.display='flex'; G.running=false;
+  $('over').style.display='flex'; G.running=false; document.body.classList.remove('playing');
 }
 
 // ---------- rendering ----------
@@ -668,17 +705,33 @@ function frame(now){
   renderer.render(scene, camera);
 }
 
+// ---------- touch controls ----------
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+if(isTouch){ document.body.classList.add('touch'); $('touchTip').style.display='block';
+  const tapKeys = {'f':()=>{ pressKey('f'); }, 'tab':()=>{ pressKey('tab'); }};
+  document.querySelectorAll('.tbtn').forEach(b=>{ const k=b.dataset.key;
+    const down=e=>{ e.preventDefault(); b.classList.add('on'); if(k==='f'){ pressKey('f'); } else keys[k]=true; try{ b.setPointerCapture(e.pointerId); }catch(err){} };
+    const up=e=>{ e.preventDefault(); b.classList.remove('on'); if(k!=='f') keys[k]=false; };
+    b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+    b.addEventListener('contextmenu', e=>e.preventDefault()); });
+  const orient=()=>document.body.classList.toggle('portrait', innerHeight>innerWidth); orient(); addEventListener('resize', orient);
+  // tap the spectate panel to switch rider
+  $('spect').style.pointerEvents='auto'; $('spect').addEventListener('click', ()=>pressKey('tab'));
+}
+function pressKey(k){ if(!G || !G.running) return;
+  if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.online) net.sendHost({t:'throw'}); } }
+  if(k==='tab'){ const a=aliveRiders(); if(a.length){ const i=a.findIndex(x=>x.id===G.spectate); G.spectate=a[(i+1)%a.length].id; } } }
 // ---------- input ----------
 addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true;
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
   if(k==='p' && !net.online){ paused=!paused; $('pause').style.display=paused?'flex':'none'; if(!paused) lastFrame=performance.now(); }
-  if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.online) net.sendHost({t:'throw'}); } }
-  if(k==='tab'){ const a=aliveRiders(); if(a.length){ const i=a.findIndex(x=>x.id===G.spectate); G.spectate=a[(i+1)%a.length].id; } } });
+  if(k==='f'||k==='tab') pressKey(k); });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
 $('resumeBtn').onclick=()=>{ paused=false; $('pause').style.display='none'; lastFrame=performance.now(); };
 
 // ---------- menus ----------
+function goFull(){ if(!isTouch) return; try{ const el=document.documentElement; const p=(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
 function saveMe(){ me.name=$('nameIn').value.trim()||'Rider'; try{ localStorage.setItem('speederRider', JSON.stringify(me)); }catch(e){} }
 let preview=null;
 function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike(me.color, me.hat, null, false); preview.position.set(0, terrainH(0,0)+0.9, 0); }
@@ -687,10 +740,10 @@ function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike
   const sw=$('swatches'); BIKE_COLORS.forEach(c=>{ const b=document.createElement('button'); b.className='sw'+(c===me.color?' on':''); b.style.background=c; b.setAttribute('aria-label','Bike color '+c); b.onclick=()=>{ me.color=c; [...sw.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; sw.appendChild(b); });
   const hb=$('hats'); Object.entries(HATS).forEach(([k,v])=>{ const b=document.createElement('button'); b.className='hat'+(k===me.hat?' on':''); b.textContent=v; b.onclick=()=>{ me.hat=k; [...hb.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; hb.appendChild(b); });
   refreshPreview();
-  $('soloBtn').onclick=()=>{ saveMe(); net.online=false; net.host=false; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}]; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
+  $('soloBtn').onclick=()=>{ saveMe(); goFull(); net.online=false; net.host=false; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}]; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
   $('hostBtn').onclick=()=>{ saveMe(); hostRoom(); };
   $('joinBtn').onclick=()=>{ saveMe(); const code=$('codeIn').value.trim().toUpperCase(); if(code.length!==4){ $('startErr').textContent='Enter the 4-letter room code.'; return; } joinRoom(code); };
-  $('startBtn').onclick=()=>{ if(!net.host) return; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
+  $('startBtn').onclick=()=>{ if(!net.host) return; goFull(); startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
   $('leaveBtn').onclick=leaveRoom;
   $('againBtn').onclick=()=>{ $('over').style.display='none'; clearWorld(); G=null; refreshPreview(); if(net.online && net.host){ showRoom(net.code); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } else if(net.online){ showRoom(net.code); } else { $('start').style.display='flex'; } };
 })();
