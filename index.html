@@ -91,17 +91,20 @@ ol.stand{margin:0 0 16px;padding-left:22px;font-size:15px;line-height:1.7}
 ol.stand b{color:var(--good)}
 #pause,#room,#over{display:none}
 .err{color:var(--bad);font-size:13px;min-height:1.2em;margin:6px 0 0}
-#touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:3}
+#touch{position:fixed;inset:0;display:none;z-index:3;touch-action:none;-webkit-user-select:none;user-select:none}
 body.touch #touch{display:block}
 body.touch #br{display:none}
-.tgrp{position:absolute;bottom:max(18px,env(safe-area-inset-bottom,0px));display:grid;gap:10px;pointer-events:none}
-#tleft{left:max(14px,env(safe-area-inset-left,0px));grid-template-columns:1fr 1fr}
-#tright{right:max(14px,env(safe-area-inset-right,0px));grid-template-columns:1fr 1fr;align-items:end}
-.tbtn{pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;width:68px;height:68px;border-radius:50%;background:rgba(18,10,31,.55);border:2px solid rgba(255,255,255,.35);color:#fff;font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.05em;display:flex;align-items:center;justify-content:center;padding:0;text-transform:none}
-.tbtn.wide{grid-column:span 2;width:146px;border-radius:34px;height:62px}
-.tbtn.big{width:84px;height:84px;font-size:15px}
-.tbtn.on{background:rgba(77,240,224,.45);border-color:#4df0e0}
-.tbtn.go{border-color:var(--good)} .tbtn.tom{border-color:#ff7a5c}
+.zone{position:absolute;top:0;bottom:0;width:50%}
+#zl{left:0} #zr{right:0}
+.stick{position:absolute;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(18,10,31,.25);display:none;pointer-events:none}
+.knob{position:absolute;width:48px;height:48px;left:31px;top:31px;border-radius:50%;background:rgba(77,240,224,.75);box-shadow:0 0 18px rgba(77,240,224,.6)}
+#tapfx{position:absolute;width:80px;height:80px;margin:-40px 0 0 -40px;border-radius:50%;border:3px solid var(--good);display:none;pointer-events:none}
+#tapfx.brake{border-color:var(--bad)}
+#tomBtn{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);width:66px;height:66px;border-radius:50%;background:rgba(18,10,31,.55);border:2px solid #ff7a5c;font-size:28px;padding:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+#tomBtn small{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-family:var(--display);font-size:9px;color:#fff;letter-spacing:.1em}
+#tomBtn:disabled{opacity:.35}
+#thint{position:absolute;left:50%;bottom:max(24px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:18px;font-family:var(--display);font-size:11px;letter-spacing:.08em;color:#fff;text-shadow:0 1px 6px #000;pointer-events:none;white-space:nowrap;transition:opacity .6s}
+#thint span{background:rgba(18,10,31,.55);padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.2)}
 body.touch{touch-action:none}
 body.touch #bl{display:none}
 body.touch #tl{padding:6px 10px;min-width:0;max-width:240px}
@@ -151,15 +154,10 @@ body.touch.portrait.playing #rotate{display:flex}
 <div id="spect" class="hud panel">YOU'RE OUT · spectating <span id="spectName"></span><br><small style="color:var(--dim)">TAB or tap here to switch rider</small></div>
 <div id="msgs" class="hud"></div>
 <div id="touch">
-  <div class="tgrp" id="tleft">
-    <button class="tbtn big" data-key="a" aria-label="Steer left">◀</button>
-    <button class="tbtn big" data-key="d" aria-label="Steer right">▶</button>
-    <button class="tbtn wide" data-key="s" aria-label="Brake and reverse">BRAKE / REV</button>
-  </div>
-  <div class="tgrp" id="tright">
-    <button class="tbtn tom" data-key="f" aria-label="Throw tomato">🍅</button>
-    <button class="tbtn big" data-key=" " aria-label="Jump">JUMP</button>
-  </div>
+  <div class="zone" id="zl"><div class="stick" id="stick"><div class="knob" id="knob"></div></div></div>
+  <div class="zone" id="zr"><div id="tapfx"></div></div>
+  <button id="tomBtn" aria-label="Throw tomato">🍅<small>THROW</small></button>
+  <div id="thint"><span>◀ LEFT THUMB: DRAG TO STEER</span><span>RIGHT THUMB: TAP = JUMP · HOLD = BRAKE ▶</span></div>
 </div>
 <div id="rotate">Turn your phone sideways to ride 🔄</div>
 
@@ -179,7 +177,7 @@ body.touch.portrait.playing #rotate{display:flex}
     <kbd>SPACE</kbd><span>Jump over rocks</span>
     <kbd>F</kbd><span>Throw tomato</span>
   </div>
-  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. The bike drives itself. Left thumb steers and brakes, right thumb jumps and throws tomatoes.</p>
+  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. The bike drives itself. Drag your left thumb to steer. Tap the right side to jump, hold it to brake. Tomato button is on the right edge.</p>
   <p class="tips">Energy drains every second. Follow the <b>GPS</b> to food. <b>Energy drinks</b> double your speed. <b>Cherries</b> clone you with a helper rider. <b>Tomatoes</b> aren't for eating: throw one at a rival and their GPS goes dark for 10 seconds. Run out of energy and you're out. <b>Last one alive wins.</b> Races last 5 minutes at most; if the clock runs out, the rider with the most energy wins.</p>
   <h2>Play</h2>
   <div class="btns">
@@ -418,7 +416,7 @@ function movePhysics(e, inp, dt){
   const boosting = e.boost>0, maxS = boosting ? 56 : 28;
   if(inp.fwd) e.speed += (boosting?60:34)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
   e.speed = T.MathUtils.clamp(e.speed, -10, maxS);
-  const turnIn = (inp.left?1:0)-(inp.right?1:0);
+  const turnIn = inp.turn !== undefined ? inp.turn : (inp.left?1:0)-(inp.right?1:0);
   e.heading += turnIn*2.3*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
   e.lean += (turnIn*0.38*Math.min(1,Math.abs(e.speed)/10) - e.lean)*Math.min(1,8*dt);
   if(inp.jump && e.y<=0.001 && e.vy<=0) e.vy = 11;
@@ -465,6 +463,17 @@ function hostThrow(e){
   e.tomatoes--; G.toms.push({x:e.x, y:terrainH(e.x,e.z)+2, z:e.z, target:best.id, from:e.id, life:4});
   msg('Tomato thrown at '+best.name+'!', 'good', e.id);
 }
+function hostPickup(e, it){
+  if(!it.alive) return; const owner = e.clone ? G.ents[e.owner] : e; if(!owner) return;
+  if(it.kind==='food'){ const f=FOODS[it.type]; owner.energy=Math.min(100,owner.energy+f.energy); owner.foodEaten++;
+    msg((e.clone?'Clone brought back ':'')+f.name+' +'+f.energy+' energy', 'good', owner.id); killItem(it, 3); }
+  else if(e.clone) return;
+  else if(it.kind==='drink'){ e.boost=8; msg('Energy drink! Double speed for 8s','boost',e.id); killItem(it, 30); }
+  else if(it.kind==='tomato'){ if(e.tomatoes>=3) return; e.tomatoes++; msg('Tomato picked up. Throw it with F or the tomato button','good',e.id); killItem(it, 20); }
+  else { const clones=Object.values(G.ents).filter(c=>c.clone&&c.owner===e.id).length;
+    if(clones<2 && !e.bot){ makeEnt({id:'c'+Math.floor(Math.random()*1e6), name:e.name+"'s clone", color:'#7cff8a', hat:e.hat, bot:true, clone:true, owner:e.id, x:e.x-Math.sin(e.heading)*4, z:e.z-Math.cos(e.heading)*4, heading:e.heading}); msg('Cherries! A clone joins you and gathers food','good',e.id); }
+    else { e.energy=Math.min(100,e.energy+15); msg('Cherries +15 energy','good',e.id); } killItem(it, 50); }
+}
 function hostSim(dt){
   G.t += dt;
   for(const id of G.order){ const e=G.ents[id]; if(!e||!e.alive) continue;
@@ -474,21 +483,10 @@ function hostSim(dt){
     if(e.crashes>0){ e.energy -= 8*e.crashes; e.crashes=0; }
     if(e.boost>0) e.boost-=dt; if(e.blind>0) e.blind-=dt;
     if(e.clone) e.y = 0;
-    // pickups
-    for(const it of G.items){ if(!it.alive) continue; const d=Math.hypot(it.x-e.x, it.z-e.z); if(d>2.6 || e.y>2.5) continue;
-      const owner = e.clone ? G.ents[e.owner] : e; if(!owner) continue;
-      if(it.kind==='food'){ const f=FOODS[it.type]; owner.energy=Math.min(100,owner.energy+f.energy); owner.foodEaten++;
-        msg((e.clone?'Clone brought back ':'')+f.name+' +'+f.energy+' energy', 'good', owner.id); killItem(it, 3); }
-      else if(e.clone) continue;
-      else if(it.kind==='drink'){ e.boost=8; msg('Energy drink! Double speed for 8s','boost',e.id); killItem(it, 30); }
-      else if(it.kind==='tomato'){ if(e.tomatoes>=3) continue; e.tomatoes++; msg('Tomato picked up. Press F to throw it','good',e.id); killItem(it, 20); }
-      else { const clones=Object.values(G.ents).filter(c=>c.clone&&c.owner===e.id).length;
-        if(clones<2 && !e.bot){ makeEnt({id:'c'+Math.floor(Math.random()*1e6), name:e.name+"'s clone", color:'#7cff8a', hat:e.hat, bot:true, clone:true, owner:e.id, x:e.x-Math.sin(e.heading)*4, z:e.z-Math.cos(e.heading)*4, heading:e.heading}); msg('Cherries! A clone joins you and gathers food','good',e.id); }
-        else { e.energy=Math.min(100,e.energy+15); msg('Cherries +15 energy','good',e.id); } killItem(it, 50); }
-    }
+    // pickups: bots, clones and the host's own rider are checked here; remote riders report their own pickups
+    if(e.bot || e.id===G.localId) for(const it of G.items){ if(it.alive && e.y<2.5 && Math.hypot(it.x-e.x, it.z-e.z)<2.8) hostPickup(e, it); }
     if(e.clone) continue;
-    const scarcity = G.t>MATCH_LEN-60 ? 2.2 : 1;
-    e.energy -= (2.0 + G.t*0.014)*(e.boost>0?1.4:1)*scarcity*dt; e.survived = G.t;
+    e.energy -= (2.0 + G.t*0.014)*(e.boost>0?1.4:1)*(G.t>MATCH_LEN-60 ? 2.2 : 1)*dt; e.survived = G.t;
     if(e.energy<=0){ e.energy=0; e.alive=false; G.elim.unshift(e.id); msg(e.name+' is out of energy!', 'bad', 'all');
       for(const c of Object.values(G.ents)) if(c.clone&&c.owner===e.id) c.alive=false; }
   }
@@ -511,7 +509,9 @@ function hostSim(dt){
   if((alive.length<=1 || left<=0) && !G.over){ G.over=true; const rest=alive.slice().sort((a,b)=>a.energy-b.energy); for(const r of rest){ r.survived=G.t; G.elim.unshift(r.id); } G.standings=G.elim.map(id=>({id, name:G.ents[id].name, bot:!!G.ents[id].bot, t:Math.floor(G.ents[id].survived)}));
     if(net.host) net.broadcast({t:'over', standings:G.standings}); showOver(); }
 }
-function keys2input(){ return {fwd:keys['w']||keys['arrowup']||(isTouch && !keys['s']), back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:keys[' ']}; }
+function keys2input(){
+  if(isTouch){ const j=touch.jump; touch.jump=false; return {fwd:!touch.brake, back:touch.brake, turn:touch.steer, jump:j}; }
+  return {fwd:keys['w']||keys['arrowup'], back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:keys[' ']}; }
 
 // ---------- snapshots ----------
 function snapshot(){
@@ -583,7 +583,9 @@ function joinRoom(code){
     let tries=0; net.joinTimer=setInterval(()=>{ if(net.welcomed){ clearInterval(net.joinTimer); return; } if(++tries>8){ clearInterval(net.joinTimer); peerFail({type:'no open room with code '+code+'. Check the code and make sure the host is still on the lobby screen'}); return; }
       net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat}); }, 1000);
     net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat});
-    net.hbTimer=setInterval(()=>{ if(net.welcomed && net.online){ net.sendHost({t:'hb'}); if(G && !G.over && performance.now()-net.lastSnap>9000){ showMsg('Lost the host','bad'); net.lastSnap=performance.now(); } } }, 2000);
+    net.hbTimer=setInterval(()=>{ if(net.welcomed && net.online){ net.sendHost({t:'hb'});
+      if(G && !G.over && performance.now()-net.lastSnap>4000){ showMsg('Reconnecting to the host...','bad'); net.lastSnap=performance.now();
+        try{ c.subscribe([topic(code,'all'), topic(code,'c/'+net.myId)], {qos:0}); if(!c.connected) c.reconnect(); }catch(e){} } } }, 2000);
   });
 }
 function hostOnMsg(d){
@@ -594,12 +596,13 @@ function hostOnMsg(d){
   if(!G) return; const e=G.ents[id]; if(!e) return;
   if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; } }
   else if(d.t==='throw'){ if(e.alive && e.tomatoes>0) hostThrow(e); }
+  else if(d.t==='take'){ const it=G.items[d.i]; if(e.alive && it && it.alive && Math.hypot(it.x-e.x,it.z-e.z)<14) hostPickup(e, it); }
 }
 function clientOnMsg(d){
   if(d.t==='welcome'){ net.welcomed=true; $('startErr').textContent=''; showRoom(d.code||net.code); }
   else if(d.t==='full'){ if(!net.welcomed) peerFail({type:'room is full or already racing'}); }
   else if(d.t==='lobby'){ if(!net.welcomed) return; net.lobby=d.players; if(!G) showRoom(d.code||net.code); renderLobby(); }
-  else if(d.t==='start'){ if(net.welcomed) startMatch(d.seed, false, d.players, d.items); }
+  else if(d.t==='start'){ if(net.welcomed){ net.lastSnap=performance.now(); startMatch(d.seed, false, d.players, d.items); } }
   else if(d.t==='snap'){ if(G){ net.lastSnap=performance.now(); applySnapshot(d, G.localId); } }
   else if(d.t==='over'){ if(G){ G.over=true; G.standings=d.standings; showOver(); } }
 }
@@ -678,6 +681,7 @@ function updateHUD(e){
   const clock=(0.22+G.t/DAY_LEN)%1; updateSky(clock);
   const phase = clock<0.2?'🌙 Night':clock<0.3?'🌅 Sunrise':clock<0.45?'☀ Morning':clock<0.55?'☀ Noon':clock<0.7?'☀ Afternoon':clock<0.8?'🌇 Sunset':'🌙 Night';
   $('clock').textContent = phase+' · day '+(Math.floor(G.t/DAY_LEN+0.22)+1);
+  if(isTouch){ const tb=$('tomBtn'); tb.disabled = !(e.id===G.localId && e.alive && e.tomatoes>0); const h=$('thint'); h.style.opacity = G.t<8 ? 1 : 0; }
   const jammed = e.blind>0 && e.id===G.localId;
   $('splat').style.display=jammed?'block':'none'; if(jammed) $('splatT').textContent=Math.ceil(e.blind); $('gps').classList.toggle('jammed', jammed);
   $('tr').style.visibility = jammed?'hidden':'visible';
@@ -702,8 +706,9 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now-lastFrame)/1000 || 0); lastFrame=now;
   if(G && G.running && !paused){
-    if(G.isHost){ const steps = humansAlive().length===0 && !G.over ? 6 : 1; for(let i=0;i<steps;i++) hostSim(dt); if(net.online){ G.sendAcc+=dt; if(G.sendAcc>=0.067){ G.sendAcc=0; net.broadcast(snapshot()); } } }
-    else { const e=G.ents[G.localId]; if(e&&e.alive){ movePhysics(e, keys2input(), dt); G.sendAcc+=dt; if(G.sendAcc>=0.067 && net.online){ G.sendAcc=0; try{ net.sendHost({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes}); e.crashes=0; }catch(err){} } } }
+    if(G.isHost){ const steps = humansAlive().length===0 && !G.over ? 6 : 1; for(let i=0;i<steps;i++) hostSim(dt); if(net.online){ G.sendAcc+=dt; if(G.sendAcc>=0.1){ G.sendAcc=0; net.broadcast(snapshot()); } } }
+    else { const e=G.ents[G.localId]; if(e&&e.alive){ movePhysics(e, keys2input(), dt);
+        for(const it of G.items){ if(it.alive && e.y<2.5 && Math.hypot(it.x-e.x,it.z-e.z)<2.8){ it.alive=false; it.mesh.visible=false; net.sendHost({t:'take', i:it.id}); } } G.sendAcc+=dt; if(G.sendAcc>=0.067 && net.online){ G.sendAcc=0; try{ net.sendHost({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes}); e.crashes=0; }catch(err){} } } }
     renderEnts(dt);
     let view = G.ents[G.localId];
     if(!view || !view.alive){ if(!G.spectate || !G.ents[G.spectate] || !G.ents[G.spectate].alive){ const a=aliveRiders(); G.spectate = a.length? a[0].id : null; } view = G.spectate? G.ents[G.spectate] : view;
@@ -714,18 +719,30 @@ function frame(now){
   renderer.render(scene, camera);
 }
 
-// ---------- touch controls ----------
+// ---------- touch controls: left half = steering pad, right half = tap to jump / hold to brake ----------
 const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const touch = { steer:0, brake:false, jump:false, hintT:0 };
 if(isTouch){ document.body.classList.add('touch'); $('touchTip').style.display='block';
-  const tapKeys = {'f':()=>{ pressKey('f'); }, 'tab':()=>{ pressKey('tab'); }};
-  document.querySelectorAll('.tbtn').forEach(b=>{ const k=b.dataset.key;
-    const down=e=>{ e.preventDefault(); b.classList.add('on'); if(k==='f'){ pressKey('f'); } else keys[k]=true; try{ b.setPointerCapture(e.pointerId); }catch(err){} };
-    const up=e=>{ e.preventDefault(); b.classList.remove('on'); if(k!=='f') keys[k]=false; };
-    b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
-    b.addEventListener('contextmenu', e=>e.preventDefault()); });
+  const tz=$('touch'), stick=$('stick'), knob=$('knob'), fx=$('tapfx'), zl=$('zl');
+  let lt=null; // left touch {id,x0}
+  let rt=null; // right touch {id,t0,x,y,braking}
+  const place=(el,x,y)=>{ el.style.left=x+'px'; el.style.top=y+'px'; };
+  function onStart(e){ e.preventDefault();
+    for(const t of e.changedTouches){ const left = t.clientX < innerWidth/2;
+      if(left && !lt){ lt={id:t.identifier, x0:t.clientX, y0:t.clientY}; place(stick,t.clientX,t.clientY); stick.style.display='block'; knob.style.transform='translate(0,0)'; touch.steer=0; }
+      else if(!left && !rt){ rt={id:t.identifier, t0:performance.now(), x:t.clientX, y:t.clientY, braking:false}; place(fx,t.clientX,t.clientY); fx.className=''; fx.style.display='block';
+        rt.timer=setTimeout(()=>{ if(rt && rt.id===t.identifier){ rt.braking=true; touch.brake=true; fx.className='brake'; } }, 180); } } }
+  function onMove(e){ e.preventDefault();
+    for(const t of e.changedTouches){ if(lt && t.identifier===lt.id){ const dx=T.MathUtils.clamp(t.clientX-lt.x0,-40,40); touch.steer = dx/40; knob.style.transform='translate('+dx+'px,0)'; } } }
+  function onEnd(e){ e.preventDefault();
+    for(const t of e.changedTouches){
+      if(lt && t.identifier===lt.id){ lt=null; touch.steer=0; stick.style.display='none'; }
+      if(rt && t.identifier===rt.id){ clearTimeout(rt.timer); if(!rt.braking){ touch.jump=true; } touch.brake=false; rt=null; fx.style.display='none'; } } }
+  tz.addEventListener('touchstart', onStart, {passive:false}); tz.addEventListener('touchmove', onMove, {passive:false});
+  tz.addEventListener('touchend', onEnd, {passive:false}); tz.addEventListener('touchcancel', onEnd, {passive:false});
+  const tb=$('tomBtn'); tb.addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); pressKey('f'); }, {passive:false});
   const orient=()=>document.body.classList.toggle('portrait', innerHeight>innerWidth); orient(); addEventListener('resize', orient);
-  // tap the spectate panel to switch rider
-  $('spect').style.pointerEvents='auto'; $('spect').addEventListener('click', ()=>pressKey('tab'));
+  $('spect').style.pointerEvents='auto'; $('spect').addEventListener('touchstart', e=>{ e.preventDefault(); pressKey('tab'); }, {passive:false});
 }
 function pressKey(k){ if(!G || !G.running) return;
   if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.online) net.sendHost({t:'throw'}); } }
