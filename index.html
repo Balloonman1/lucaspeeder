@@ -489,11 +489,17 @@ function applySnapshot(s, forId){
 // ---------- networking (PeerJS, host-authoritative) ----------
 const net = { host:false, online:false, peer:null, conns:{}, hostConn:null, lobby:[], nextId:1 };
 function roomId(code){ return 'speeder-forager-veyra9-'+code; }
+const PEER_OPTS = { debug:0, config:{ iceServers:[
+  {urls:'stun:stun.l.google.com:19302'}, {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'turn:openrelay.metered.ca:80', username:'openrelayproject', credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject'},
+  {urls:'turn:openrelay.metered.ca:443?transport=tcp', username:'openrelayproject', credential:'openrelayproject'} ] } };
 function randomCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ'; let s=''; for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
-function peerFail(err){ $('startErr').textContent = 'Online play is not available here: '+(err&&err.type||'connection blocked')+'. The website version supports rooms. Solo mode still works.'; $('hostBtn').disabled=$('joinBtn').disabled=false; }
+function peerFail(err){ $('startErr').textContent = 'Online play failed: '+(err&&err.type||'connection blocked')+'. Solo mode still works.'; $('hostBtn').disabled=$('joinBtn').disabled=false; if(net.peer){ try{ net.peer.destroy(); }catch(e){} net.peer=null; } net.online=false; }
 function hostRoom(){
   const code=randomCode(); $('hostBtn').disabled=$('joinBtn').disabled=true; $('startErr').textContent='Opening room...';
-  let peer; try{ peer=new Peer(roomId(code), {debug:0}); }catch(e){ peerFail(e); return; }
+  let peer; try{ peer=new Peer(roomId(code), PEER_OPTS); }catch(e){ peerFail(e); return; }
+  setTimeout(()=>{ if(!peer.open && !G && net.peer===peer){ peerFail({type:'matchmaking service unreachable'}); } }, 12000);
   net.peer=peer; net.host=true; net.online=true; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}];
   peer.on('open', ()=>{ $('startErr').textContent=''; showRoom(code); });
   peer.on('error', e=>{ if(!G){ peerFail(e); net.online=false; } });
@@ -505,15 +511,17 @@ function hostRoom(){
 }
 function joinRoom(code){
   $('hostBtn').disabled=$('joinBtn').disabled=true; $('startErr').textContent='Joining '+code+'...';
-  let peer; try{ peer=new Peer(undefined,{debug:0}); }catch(e){ peerFail(e); return; }
+  let peer; try{ peer=new Peer(undefined, PEER_OPTS); }catch(e){ peerFail(e); return; }
+  setTimeout(()=>{ if(!peer.open && !G && net.peer===peer){ peerFail({type:'matchmaking service unreachable'}); } }, 12000);
   net.peer=peer; net.host=false; net.online=true;
-  peer.on('error', e=>{ if(!G){ peerFail(e); net.online=false; } else { showMsg('Connection lost','bad'); } });
+  peer.on('error', e=>{ if(!G){ peerFail(e && e.type==='peer-unavailable' ? {type:'no room with code '+code+' is open right now'} : e); net.online=false; } else { showMsg('Connection lost','bad'); } });
   peer.on('open', ()=>{
     const c=peer.connect(roomId(code), {reliable:true}); net.hostConn=c;
     c.on('open', ()=>{ c.send({t:'join', name:me.name, color:me.color, hat:me.hat}); });
     c.on('data', d=>clientOnMsg(d));
     c.on('close', ()=>{ if(G && !G.over){ showMsg('Host left the room','bad'); } net.online=false; });
-    setTimeout(()=>{ if(!c.open && !G){ peerFail({type:'room not found'}); } }, 8000);
+    $('startErr').textContent='Found the matchmaking service, connecting to the host...';
+    setTimeout(()=>{ if(!c.open && !G && net.hostConn===c){ peerFail({type:'the host was found but no connection could be made in 20 seconds. Both players must be on the website version, and some school or work networks block this. Try a phone hotspot'}); } }, 20000);
   });
 }
 net.broadcast = m => { for(const id in net.conns){ try{ net.conns[id].send(m); }catch(e){} } };
