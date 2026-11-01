@@ -10,6 +10,6 @@ A 3D hover-bike survival race through the Veyra canyon, created by a 7-year-old 
 
 Multiplayer uses a public MQTT relay over WebSocket, so it works behind home routers with nothing to host.
 
-Controls: W/S drive, A/D steer, Space jump, F throw tomato, Tab spectate, P pause (solo). On phones: drag left thumb to steer, tap right side to jump, hold to brake.
+Controls: W/S drive, A/D steer, Space jump (double-tap for a backflip), F throw tomato, Tab spectate, P pause (solo). On phones: drag left thumb to steer, tap right side to jump, hold to brake.
 
 Built with Three.js r128 in a single `index.html`.

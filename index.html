@@ -199,7 +199,7 @@ body.touch.portrait.playing #rotate{display:flex}
   <div class="zone" id="zl"><div class="stick" id="stick"><div class="knob" id="knob"></div></div></div>
   <div class="zone" id="zr"><div id="tapfx"></div></div>
   <button id="tomBtn" aria-label="Throw tomato">🍅<small>THROW</small></button>
-  <div id="thint"><span>◀ LEFT THUMB: DRAG TO STEER</span><span>RIGHT THUMB: TAP = JUMP · HOLD = BRAKE ▶</span></div>
+  <div id="thint"><span>◀ LEFT THUMB: DRAG TO STEER</span><span>RIGHT THUMB: TAP = JUMP · DOUBLE-TAP = FLIP · HOLD = BRAKE ▶</span></div>
 </div>
 <div id="rotate">Turn your phone sideways to ride 🔄</div>
 
@@ -225,11 +225,11 @@ body.touch.portrait.playing #rotate{display:flex}
   <div class="keys">
     <kbd>W / S</kbd><span>Throttle, brake, reverse</span>
     <kbd>A / D</kbd><span>Steer</span>
-    <kbd>SPACE</kbd><span>Jump over rocks and crystals (not towers)</span>
+    <kbd>SPACE</kbd><span>Jump (-2 energy). Double-tap for a backflip (-5)</span>
     <kbd>F</kbd><span>Throw tomato</span>
   </div>
-  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. The bike drives itself. Drag your left thumb to steer. Tap the right side to jump, hold it to brake. Tomato button is on the right edge.</p>
-  <p class="tips">Energy drains every second. Follow the <b>GPS</b> to food. <b>Energy drinks</b> double your speed. <b>Cherries</b> clone you with a helper rider. <b>Tomatoes</b> aren't for eating: throw one at a rival and their GPS goes dark for 10 seconds. Run out of energy and you're out. <b>Last one alive wins.</b> Races last 5 minutes at most; if the clock runs out, the rider with the most energy wins.</p>
+  <p class="tips" id="touchTip" style="display:none">On a phone: turn it sideways. The bike drives itself. Drag your left thumb to steer. Tap the right side to jump, double-tap for a backflip, hold it to brake. Tomato button is on the right edge.</p>
+  <p class="tips">Energy drains every second. Follow the <b>GPS</b> to food. <b>Energy drinks</b> double your speed. <b>Cherries</b> clone you with a helper rider. A <b>jump</b> throws you forward but costs 2 energy; a double-tap <b>backflip</b> goes higher and further for 5. <b>Tomatoes</b> aren't for eating: throw one at a rival and their GPS goes dark for 10 seconds. Run out of energy and you're out. <b>Last one alive wins.</b> Races last 5 minutes at most; if the clock runs out, the rider with the most energy wins.</p>
   <h2>Race length</h2>
   <div class="modes"><button class="mode on" data-len="300">Classic · 5 min</button><button class="mode" data-len="90">Quick play · 90 sec</button></div>
   <h2>Play</h2>
@@ -595,14 +595,49 @@ function makeBike(color, hat, name, clone){
 }
 
 // ---------- items ----------
+// food textures drawn once on canvases
+function canvasTex(size, draw){ const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d'); draw(x,size); const t=new T.CanvasTexture(c); t.encoding=T.sRGBEncoding; return t; }
+const FOODTEX = {
+  strawberry: canvasTex(128,(x,S)=>{ const g=x.createLinearGradient(0,0,0,S); g.addColorStop(0,'#ff4d5e'); g.addColorStop(1,'#b8122a'); x.fillStyle=g; x.fillRect(0,0,S,S); for(let i=0;i<90;i++){ const px=(i%10)*12.8+((Math.floor(i/10)%2)*6)+4, py=Math.floor(i/10)*13+4; x.fillStyle='#f6e27a'; x.beginPath(); x.ellipse(px,py,1.8,2.6,0,0,6.3); x.fill(); x.fillStyle='rgba(120,0,20,.5)'; x.beginPath(); x.ellipse(px,py+3,2.4,1.4,0,0,6.3); x.fill(); } }),
+  bagel: canvasTex(128,(x,S)=>{ const g=x.createLinearGradient(0,0,S,S); g.addColorStop(0,'#e3b57a'); g.addColorStop(1,'#b97a3e'); x.fillStyle=g; x.fillRect(0,0,S,S); for(let i=0;i<120;i++){ x.fillStyle=Math.random()<.8?'#f7f0dc':'#3a2a1a'; x.save(); x.translate(Math.random()*S,Math.random()*S); x.rotate(Math.random()*3); x.beginPath(); x.ellipse(0,0,2.6,1.4,0,0,6.3); x.fill(); x.restore(); } }),
+  toast: canvasTex(128,(x,S)=>{ const g=x.createRadialGradient(S/2,S/2,10,S/2,S/2,S*0.75); g.addColorStop(0,'#f1d7a3'); g.addColorStop(.7,'#d9a862'); g.addColorStop(1,'#8b4b1f'); x.fillStyle=g; x.fillRect(0,0,S,S); for(let i=0;i<300;i++){ x.fillStyle='rgba(90,40,10,'+(Math.random()*.25)+')'; x.fillRect(Math.random()*S,Math.random()*S,2,2); } }),
+  milk: canvasTex(128,(x,S)=>{ x.fillStyle='#f8f8ff'; x.fillRect(0,0,S,S); x.fillStyle='#2f6fe0'; x.fillRect(0,S*0.62,S,S*0.14); x.fillRect(0,S*0.18,S,6); x.fillStyle='#2f6fe0'; x.font='bold 26px Exo 2, sans-serif'; x.textAlign='center'; x.fillText('MILK',S/2,S*0.5); x.fillStyle='#1b3f8a'; x.font='bold 10px Exo 2, sans-serif'; x.fillText('VEYRA DAIRY · 1L',S/2,S*0.88); }),
+  rice: canvasTex(128,(x,S)=>{ x.fillStyle='#fbf6ea'; x.fillRect(0,0,S,S); for(let i=0;i<420;i++){ x.fillStyle='rgba(230,220,200,.9)'; x.save(); x.translate(Math.random()*S,Math.random()*S); x.rotate(Math.random()*3); x.beginPath(); x.ellipse(0,0,3,1.2,0,0,6.3); x.fill(); x.restore(); } }),
+  bowl: canvasTex(128,(x,S)=>{ x.fillStyle='#2a4c7a'; x.fillRect(0,0,S,S); x.fillStyle='#e9eef5'; x.fillRect(0,S*0.28,S,5); x.fillRect(0,S*0.4,S,2); x.fillStyle='#d58a3a'; x.fillRect(0,S*0.72,S,10); }),
+  leaf: canvasTex(64,(x,S)=>{ x.fillStyle='#2f8f3a'; x.fillRect(0,0,S,S); x.strokeStyle='#1d5f25'; x.lineWidth=2; for(let i=0;i<6;i++){ x.beginPath(); x.moveTo(S/2,S); x.lineTo(S/2+(i-2.5)*9,0); x.stroke(); } }),
+};
+const fmat = (o)=>new T.MeshStandardMaterial(Object.assign({roughness:.6, metalness:0}, o));
 const FOODS = {
-  rice:{name:'Rice & beans', energy:30, color:'#ffe9a8', build:()=>{const g=new T.Group(); g.add(new T.Mesh(new T.CylinderGeometry(.9,.6,.6,14), mat(0x8c4a2f))).position.y=.3; const top=new T.Mesh(new T.CylinderGeometry(.85,.85,.3,14), mat(0xfff4d6)); top.position.y=.7; g.add(top); for(let i=0;i<7;i++){const b=new T.Mesh(new T.SphereGeometry(.13,6,6), mat(0x5a2b1b)); b.position.set(rand(-.5,.5),.9,rand(-.5,.5)); g.add(b);} return g;}},
-  veg:{name:'Vegetables', energy:22, color:'#9dff8a', build:()=>{const g=new T.Group(); for(let i=0;i<4;i++){const b=new T.Mesh(new T.SphereGeometry(.4,8,8), mat(0x3fbf4a)); b.position.set(rand(-.5,.5),.5+rand(0,.3),rand(-.5,.5)); g.add(b);} const c=new T.Mesh(new T.ConeGeometry(.22,1.3,8), mat(0xff8c2a)); c.rotation.z=1.2; c.position.set(.3,.5,.4); g.add(c); return g;}},
-  strawberry:{name:'Strawberries', energy:15, color:'#ff7a9a', build:()=>{const g=new T.Group(); for(let i=0;i<3;i++){const s=new T.Group(); const b=new T.Mesh(new T.ConeGeometry(.42,.9,10), mat(0xe8203f)); b.rotation.x=Math.PI; b.position.y=.45; s.add(b); const l=new T.Mesh(new T.ConeGeometry(.3,.25,6), mat(0x2f9f3a)); l.position.y=.95; s.add(l); s.position.set(rand(-.5,.5),0,rand(-.5,.5)); g.add(s);} return g;}},
-  raspberry:{name:'Raspberries', energy:15, color:'#ff5da8', build:()=>{const g=new T.Group(); for(let i=0;i<3;i++){const c=new T.Group(); for(let j=0;j<8;j++){const b=new T.Mesh(new T.SphereGeometry(.17,6,6), mat(0xd91e6a)); b.position.set(rand(-.25,.25),.3+rand(-.25,.25),rand(-.25,.25)); c.add(b);} c.position.set(rand(-.5,.5),.2,rand(-.5,.5)); g.add(c);} return g;}},
-  milk:{name:'Milk', energy:20, color:'#ffffff', build:()=>{const g=new T.Group(); const b=new T.Mesh(new T.BoxGeometry(.8,1.3,.8), mat(0xf7f7ff)); b.position.y=.65; g.add(b); const r=new T.Mesh(new T.BoxGeometry(.8,.5,.3), mat(0x4da3ff)); r.position.set(0,1.5,0); g.add(r); const s=new T.Mesh(new T.BoxGeometry(.84,.35,.84), mat(0x4da3ff)); s.position.y=.55; g.add(s); return g;}},
-  bagel:{name:'Bagels', energy:25, color:'#f5c77a', build:()=>{const g=new T.Group(); for(let i=0;i<2;i++){const t=new T.Mesh(new T.TorusGeometry(.55,.26,10,20), mat(0xd9a05b)); t.rotation.x=Math.PI/2; t.position.y=.3+i*.55; g.add(t);} return g;}},
-  toast:{name:'Toast', energy:18, color:'#f0c08a', build:()=>{const g=new T.Group(); for(let i=0;i<2;i++){const t=new T.Mesh(new T.BoxGeometry(1.1,1.1,.2), mat(0xe4b06a)); const crust=new T.Mesh(new T.BoxGeometry(1.2,1.2,.16), mat(0x9a5a2a)); t.position.set(i*.4-.2,.6,i*.3); crust.position.copy(t.position); t.rotation.y=i*.4; crust.rotation.y=i*.4; g.add(crust); g.add(t);} return g;}},
+  rice:{name:'Rice & beans', energy:30, color:'#ffe9a8', build:()=>{ const g=new T.Group();
+    const bowl=new T.Mesh(new T.CylinderGeometry(.95,.55,.75,24,1,true), fmat({map:FOODTEX.bowl, side:T.DoubleSide, roughness:.3})); bowl.position.y=.38; g.add(bowl);
+    const bottom=new T.Mesh(new T.CircleGeometry(.55,24), fmat({color:0x2a4c7a, roughness:.3})); bottom.rotation.x=Math.PI/2; bottom.position.y=.01; g.add(bottom);
+    const rim=new T.Mesh(new T.TorusGeometry(.95,.05,8,32), fmat({color:0xe9eef5, roughness:.25})); rim.rotation.x=Math.PI/2; rim.position.y=.75; g.add(rim);
+    const rice=new T.Mesh(new T.SphereGeometry(.88,24,12,0,6.3,0,1.35), fmat({map:FOODTEX.rice, roughness:.8})); rice.position.y=.35; rice.scale.y=.6; g.add(rice);
+    for(let i=0;i<9;i++){ const b=new T.Mesh(new T.SphereGeometry(.12,10,8), fmat({color:0x4a2317, roughness:.35})); b.scale.set(1,.7,1.4); const a=i/9*6.28, r=rand(.15,.6); b.position.set(Math.cos(a)*r,.86+rand(0,.05),Math.sin(a)*r); b.rotation.y=rand(0,3); g.add(b); }
+    const spoon=new T.Mesh(new T.CylinderGeometry(.03,.03,1.3,6), fmat({color:0xcfd4dc, metalness:.9, roughness:.2})); spoon.position.set(.5,.95,-.2); spoon.rotation.z=-.9; spoon.rotation.x=.3; g.add(spoon); return g; }},
+  veg:{name:'Vegetables', energy:22, color:'#9dff8a', build:()=>{ const g=new T.Group();
+    const crate=new T.Mesh(new T.BoxGeometry(1.5,.45,1.1), fmat({color:0x9a7045, roughness:.9})); crate.position.y=.22; g.add(crate);
+    for(let i=0;i<2;i++){ const car=new T.Mesh(new T.ConeGeometry(.17,1.1,10), fmat({color:0xff7f1f, roughness:.5})); car.position.set(-.45+i*.25,.55,.1*i); car.rotation.z=1.35; car.rotation.y=i*.5; g.add(car); const lf=new T.Mesh(new T.ConeGeometry(.12,.35,5), fmat({color:0x2f9f3a})); lf.position.set(car.position.x+.5,.62,car.position.z); lf.rotation.z=1.35; g.add(lf); }
+    const broc=new T.Mesh(new T.CylinderGeometry(.09,.13,.5,8), fmat({color:0xa8d070})); broc.position.set(.35,.6,-.2); g.add(broc); for(let i=0;i<7;i++){ const f=new T.Mesh(new T.IcosahedronGeometry(.17,1), fmat({color:0x2d7a2a, roughness:.95, flatShading:true})); f.position.set(.35+rand(-.2,.2),.85+rand(0,.12),-.2+rand(-.2,.2)); g.add(f); }
+    const pep=new T.Mesh(new T.SphereGeometry(.28,16,12), fmat({color:0xe0b020, roughness:.3})); pep.scale.y=1.15; pep.position.set(.45,.68,.3); g.add(pep); const stem=new T.Mesh(new T.CylinderGeometry(.04,.05,.18,6), fmat({color:0x2f9f3a})); stem.position.set(.45,1.0,.3); g.add(stem);
+    const tom=new T.Mesh(new T.SphereGeometry(.24,16,12), fmat({color:0xe8321e, roughness:.3})); tom.position.set(-.15,.62,.35); g.add(tom); return g; }},
+  strawberry:{name:'Strawberries', energy:15, color:'#ff7a9a', build:()=>{ const g=new T.Group(); const basket=new T.Mesh(new T.CylinderGeometry(.75,.55,.45,8,1,true), fmat({color:0x5a8a3a, side:T.DoubleSide, roughness:.9})); basket.position.y=.22; g.add(basket);
+    for(let i=0;i<5;i++){ const s2=new T.Group(); const b=new T.Mesh(new T.SphereGeometry(.3,16,14), fmat({map:FOODTEX.strawberry, roughness:.35})); b.scale.set(1,1.25,1); b.position.y=.3; s2.add(b); const tip=new T.Mesh(new T.ConeGeometry(.3,.5,16), fmat({map:FOODTEX.strawberry, roughness:.35})); tip.rotation.x=Math.PI; tip.position.y=.05; s2.add(tip);
+      for(let k=0;k<5;k++){ const l=new T.Mesh(new T.ConeGeometry(.07,.28,4), fmat({color:0x2f9f3a})); const a=k/5*6.28; l.position.set(Math.cos(a)*.14,.62,Math.sin(a)*.14); l.rotation.set(Math.sin(a)*1.2,0,-Math.cos(a)*1.2); s2.add(l); }
+      const a=i/5*6.28; s2.position.set(Math.cos(a)*.35,.35+rand(0,.1),Math.sin(a)*.35); s2.rotation.set(rand(-.6,.6),rand(0,6),rand(-.6,.6)); s2.scale.setScalar(.85); g.add(s2); } return g; }},
+  raspberry:{name:'Raspberries', energy:15, color:'#ff5da8', build:()=>{ const g=new T.Group(); const basket=new T.Mesh(new T.CylinderGeometry(.7,.5,.4,8,1,true), fmat({color:0xd9c7a8, side:T.DoubleSide, roughness:.95})); basket.position.y=.2; g.add(basket);
+    for(let i=0;i<5;i++){ const c=new T.Group(); for(let j=0;j<14;j++){ const b=new T.Mesh(new T.SphereGeometry(.09,10,8), fmat({color:j%3?0xc8185e:0xe0407f, roughness:.25})); const ph=j/14*6.28*2.3, r=.17*(1-j/20); b.position.set(Math.cos(ph)*r, .1+j*.028, Math.sin(ph)*r); c.add(b); }
+      const a=i/5*6.28; c.position.set(Math.cos(a)*.3,.3+rand(0,.1),Math.sin(a)*.3); c.rotation.set(rand(-.5,.5),rand(0,6),rand(-.5,.5)); g.add(c); } return g; }},
+  milk:{name:'Milk', energy:20, color:'#ffffff', build:()=>{ const g=new T.Group(); const body=new T.Mesh(new T.BoxGeometry(.8,1.25,.8), fmat({map:FOODTEX.milk, roughness:.55})); body.position.y=.62; g.add(body);
+    const roofG=new T.BufferGeometry(); const v=new Float32Array([-.4,1.25,-.4, .4,1.25,-.4, 0,1.7,-.4,  .4,1.25,.4, -.4,1.25,.4, 0,1.7,.4,  -.4,1.25,-.4, 0,1.7,-.4, 0,1.7,.4,  -.4,1.25,-.4, 0,1.7,.4, -.4,1.25,.4,  .4,1.25,-.4, .4,1.25,.4, 0,1.7,.4,  .4,1.25,-.4, 0,1.7,.4, 0,1.7,-.4]);
+    roofG.setAttribute('position', new T.BufferAttribute(v,3)); roofG.computeVertexNormals(); g.add(new T.Mesh(roofG, fmat({color:0xf8f8ff, roughness:.55, side:T.DoubleSide})));
+    const cap=new T.Mesh(new T.CylinderGeometry(.09,.09,.08,12), fmat({color:0x2f6fe0, roughness:.3})); cap.position.set(0,1.42,.25); cap.rotation.x=-.5; g.add(cap); return g; }},
+  bagel:{name:'Bagels', energy:25, color:'#f5c77a', build:()=>{ const g=new T.Group(); const paper=new T.Mesh(new T.CircleGeometry(1,24), fmat({color:0xe8dcc0, roughness:1, side:T.DoubleSide})); paper.rotation.x=-Math.PI/2; paper.position.y=.02; g.add(paper);
+    for(let i=0;i<3;i++){ const t=new T.Mesh(new T.TorusGeometry(.5,.24,14,28), fmat({map:FOODTEX.bagel, roughness:.75})); t.rotation.x=Math.PI/2+(i===2?.35:0); t.position.set(i===2?.2:0, .25+i*.4, i===2?-.1:0); t.rotation.z=i*.7; g.add(t); } return g; }},
+  toast:{name:'Toast', energy:18, color:'#f0c08a', build:()=>{ const g=new T.Group(); const plate=new T.Mesh(new T.CylinderGeometry(1,.85,.08,28), fmat({color:0xf2f2f6, roughness:.25})); plate.position.y=.04; g.add(plate);
+    for(let i=0;i<2;i++){ const sl=new T.Group(); const body=new T.Mesh(new T.BoxGeometry(1.0,1.0,.16), fmat({map:FOODTEX.toast, roughness:.9})); sl.add(body); const top=new T.Mesh(new T.CylinderGeometry(.5,.5,.16,20,1,false,0,Math.PI), fmat({map:FOODTEX.toast, roughness:.9})); top.rotation.x=Math.PI/2; top.rotation.z=0; top.position.y=.5; top.scale.set(1.0,1,.7); sl.add(top);
+      const butter=new T.Mesh(new T.BoxGeometry(.3,.22,.06), fmat({color:0xffe27a, roughness:.3})); butter.position.set(0,.15,.11); sl.add(butter);
+      sl.position.set(-.15+i*.3,.6,-.2+i*.25); sl.rotation.set(-.25,i*.4,0); g.add(sl); } return g; }},
 };
 const FOOD_KEYS = Object.keys(FOODS);
 function buildDrink(){ const g=new T.Group(); const c=new T.Mesh(new T.CylinderGeometry(.42,.42,1.4,14), new T.MeshPhongMaterial({color:0x4df0e0, emissive:0x1aa89a, shininess:100})); c.position.y=.7; g.add(c); const band=new T.Mesh(new T.CylinderGeometry(.44,.44,.3,14), mat(0xff6ad5)); band.position.y=.7; g.add(band); return g; }
@@ -667,6 +702,7 @@ const SFX = (function(){
     crash(){ noise(.45,.7,{freq:900}); tone(120,.4,'sawtooth',.4,null,{slide:40}); },
     land(){ noise(.15,.3,{freq:600}); tone(90,.15,'sine',.3,null,{slide:50}); },
     jump(){ tone(220,.3,'triangle',.3,null,{slide:660}); noise(.2,.15,{type:'highpass',freq:1500}); },
+    flip(){ tone(300,.5,'triangle',.3,null,{slide:1200}); setTimeout(()=>tone(900,.3,'sine',.25,null,{slide:1500}),180); noise(.4,.2,{type:'bandpass',freq:2200}); },
     turbo(){ tone(120,1.2,'sawtooth',.35,null,{slide:900, attack:.2}); noise(1,.3,{type:'bandpass',freq:1200}); },
     beep(){ tone(880,.15,'square',.3); }, go(){ tone(1320,.5,'square',.35); tone(1760,.5,'square',.25); noise(.4,.3,{type:'highpass',freq:2500}); },
     out(){ tone(400,.5,'sawtooth',.3,null,{slide:80}); setTimeout(()=>tone(300,.5,'sawtooth',.3,null,{slide:60}),250); },
@@ -681,13 +717,13 @@ const SFX = (function(){
   function play(name,arg){ if(!ctx || vol.muted && false) { if(!ctx) return; } try{ sounds[name] && sounds[name](arg); }catch(e){} }
   // engine hum: two detuned saws through a lowpass, pitch tied to speed
   function startEngine(){ if(!ctx || engine) return; const o1=ctx.createOscillator(), o2=ctx.createOscillator(), f=ctx.createBiquadFilter(), g=ctx.createGain(), wind=ctx.createGain();
-    o1.type='sawtooth'; o2.type='square'; o1.frequency.value=55; o2.frequency.value=110.5; f.type='lowpass'; f.frequency.value=400; g.gain.value=0.0;
+    o1.type='sine'; o2.type='triangle'; o1.frequency.value=55; o2.frequency.value=110.5; f.type='lowpass'; f.frequency.value=260; f.Q.value=0.4; g.gain.value=0.0;
     o1.connect(f); o2.connect(f); f.connect(g); g.connect(sfxBus);
     const n=ctx.sampleRate*2, buf=ctx.createBuffer(1,n,ctx.sampleRate), d=buf.getChannelData(0); for(let i=0;i<n;i++) d[i]=Math.random()*2-1; const ws=ctx.createBufferSource(); ws.buffer=buf; ws.loop=true; const wf=ctx.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=900; wf.Q.value=.6; ws.connect(wf); wf.connect(wind); wind.gain.value=0; wind.connect(sfxBus);
     o1.start(); o2.start(); ws.start(); engine={o1,o2,f,g,wind}; }
-  function engineState(speedN, boosting, on){ if(!engine) return; const t=ctx.currentTime; const target = on ? 0.08+speedN*0.1 : 0; engine.g.gain.setTargetAtTime(target, t, .08);
-    const base = 50 + speedN*120 + (boosting?60:0); engine.o1.frequency.setTargetAtTime(base, t, .1); engine.o2.frequency.setTargetAtTime(base*2.01, t, .1); engine.f.frequency.setTargetAtTime(300+speedN*1800+(boosting?1200:0), t, .1);
-    engine.wind.gain.setTargetAtTime(on ? Math.max(0,speedN-0.4)*0.35 : 0, t, .15); }
+  function engineState(speedN, boosting, on){ if(!engine) return; const t=ctx.currentTime; const target = on ? 0.025+speedN*0.045 : 0; engine.g.gain.setTargetAtTime(target, t, .15);
+    const base = 48 + speedN*70 + (boosting?30:0); engine.o1.frequency.setTargetAtTime(base, t, .2); engine.o2.frequency.setTargetAtTime(base*1.5, t, .2); engine.f.frequency.setTargetAtTime(200+speedN*500+(boosting?400:0), t, .2);
+    engine.wind.gain.setTargetAtTime(on ? Math.max(0,speedN-0.35)*0.22 : 0, t, .25); }
   // music: a procedural sequencer. mood 0 = menu, 1 = race, 2 = final minute
   const SCALE=[0,3,5,7,10,12,15,17]; let mood=0;
   function startMusic(){ if(!ctx || music) return; music={step:0, next:ctx.currentTime+0.1, root:110}; schedule(); }
@@ -754,12 +790,18 @@ const humansAlive = ()=> aliveRiders().filter(e=>!e.bot);
 // ---------- physics for a human-controlled rider ----------
 function movePhysics(e, inp, dt){
   const boosting = e.boost>0, maxS = boosting ? 56 : 28;
-  if(inp.fwd) e.speed += (boosting?60:34)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
-  e.speed = T.MathUtils.clamp(e.speed, -10, maxS);
+  if(e.y>0.001){ /* airborne: hold speed */ } else if(inp.fwd) e.speed += (boosting?60:34)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
+  e.speed = T.MathUtils.clamp(e.speed, -10, e.y>0.001 ? Math.max(maxS, e.speed) : maxS);
   const turnIn = inp.turn !== undefined ? inp.turn : (inp.left?1:0)-(inp.right?1:0);
   e.heading += turnIn*2.3*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
   e.lean += (turnIn*0.38*Math.min(1,Math.abs(e.speed)/10) - e.lean)*Math.min(1,8*dt);
-  if(inp.jump && e.y<=0.001 && e.vy<=0){ e.vy = 14; e.jumpedOver={}; if(e.id===G.localId) SFX.play('jump'); }
+  const grounded = e.y<=0.001 && e.vy<=0;
+  if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? 19 : 14; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0;
+    if(e.speed>4) e.speed = Math.min(e.boost>0?60:34, e.speed + (flip?7:4));                 // a jump launches you forward
+    e.jumpCost = (e.jumpCost||0) + (flip?5:2);                                                // and burns energy
+    if(e.id===G.localId){ SFX.play(flip?'flip':'jump'); if(flip) announce('BACKFLIP!','boost','-5 energy'); else showMsg('Jump -2 energy','boost'); } }
+  if(!grounded){ e.airT=(e.airT||0)+dt; }
+  if(e.flipping){ const total = 2*19/24; e.flipA = Math.min(1, (e.airT||0)/total); if(grounded && e.airT>0.2){ e.flipping=false; e.flipA=0; } }
   e.vy -= 24*dt; e.y += e.vy*dt; if(e.y<0){ e.y=0; e.vy=0; }
   e.x += Math.sin(e.heading)*e.speed*dt; e.z += Math.cos(e.heading)*e.speed*dt;
   const lim=HALF-10;
@@ -825,6 +867,7 @@ function hostSim(dt){
     // crash damage reported by clients and local alike
     if(e.crashes>0){ e.energy -= 8*e.crashes; e.crashes=0; }
     if(e.closeCalls>0){ e.energy=Math.min(100,e.energy+3*e.closeCalls); e.closeCalls=0; }
+    if(e.jumpCost>0){ e.energy -= e.jumpCost; e.jumpCost=0; }
     if(e.comboT>0){ e.comboT-=dt; if(e.comboT<=0) e.combo=0; }
     if(e.boost>0) e.boost-=dt; if(e.blind>0) e.blind-=dt;
     if(e.clone) e.y = 0;
@@ -855,12 +898,13 @@ function hostSim(dt){
     if(net.host) net.broadcast({t:'over', standings:G.standings}); showOver(); }
 }
 function keys2input(){
-  if(isTouch){ const j=touch.jump; touch.jump=false; return {fwd:!touch.brake, back:touch.brake, turn:touch.steer, jump:j}; }
-  return {fwd:keys['w']||keys['arrowup'], back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:keys[' ']}; }
+  const j=jumpReq.jump, fl=jumpReq.flip; jumpReq.jump=false; jumpReq.flip=false;
+  if(isTouch) return {fwd:!touch.brake, back:touch.brake, turn:touch.steer, jump:j, flip:fl};
+  return {fwd:keys['w']||keys['arrowup'], back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:j, flip:fl}; }
 
 // ---------- snapshots ----------
 function snapshot(){
-  return { t:'snap', gt:G.t, ents:G.order.map(id=>{ const e=G.ents[id]; return {id, n:e.name, c:e.color, ht:e.hat, bot:e.bot?1:0, cl:e.clone?1:0, ow:e.owner, x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), e:Math.round(e.energy), a:e.alive?1:0, b:+e.blind.toFixed(1), bo:+e.boost.toFixed(1), tm:e.tomatoes, f:e.foodEaten}; }),
+  return { t:'snap', gt:G.t, ents:G.order.map(id=>{ const e=G.ents[id]; return {id, n:e.name, c:e.color, ht:e.hat, bot:e.bot?1:0, cl:e.clone?1:0, ow:e.owner, x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), e:Math.round(e.energy), a:e.alive?1:0, b:+e.blind.toFixed(1), bo:+e.boost.toFixed(1), tm:e.tomatoes, f:e.foodEaten, fa:+(e.flipping?e.flipA:(e.rflip||0)).toFixed(2)}; }),
     items:G.items.map(it=>[it.alive?1:0, +it.x.toFixed(1), +it.z.toFixed(1)]), toms:G.toms.map(tm=>[+tm.x.toFixed(1),+tm.y.toFixed(1),+tm.z.toFixed(1)]), msgs:G.msgs.splice(0) };
 }
 function applySnapshot(s, forId){
@@ -868,7 +912,7 @@ function applySnapshot(s, forId){
   for(const d of s.ents){ seen.add(d.id); let e=G.ents[d.id];
     if(!e) e = makeEnt({id:d.id, name:d.n, color:d.c, hat:d.ht, bot:!!d.bot, clone:!!d.cl, owner:d.ow, x:d.x, z:d.z, heading:d.h});
     Object.assign(e, {energy:d.e, alive:!!d.a, blind:d.b, boost:d.bo, tomatoes:d.tm, foodEaten:d.f});
-    if(d.id!==forId){ e.tx=d.x; e.tz=d.z; e.ty=d.y; e.th=d.h; e.speed=d.s; e.lean=d.l; }
+    if(d.id!==forId){ e.tx=d.x; e.tz=d.z; e.ty=d.y; e.th=d.h; e.speed=d.s; e.lean=d.l; e.rflip=d.fa||0; }
     if(!e.alive) e.mesh.visible=false;
   }
   for(const id of [...G.order]) if(!seen.has(id)) removeEnt(G.ents[id]);
@@ -939,7 +983,7 @@ function hostOnMsg(d){
     if(net.lobby.length>=MAX_PLAYERS || G){ net.sendTo(id,{t:'full'}); return; }
     net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat}); net.sendTo(id,{t:'welcome', id, code:net.code}); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); renderLobby(); return; }
   if(!G) return; const e=G.ents[id]; if(!e) return;
-  if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; e.closeCalls=(e.closeCalls||0)+(d.cc||0); } }
+  if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; e.closeCalls=(e.closeCalls||0)+(d.cc||0); e.jumpCost=(e.jumpCost||0)+(d.jc||0); e.rflip=d.fa||0; } }
   else if(d.t==='throw'){ if(e.alive && e.tomatoes>0) hostThrow(e); }
   else if(d.t==='take'){ const it=G.items[d.i]; if(e.alive && it && it.alive && Math.hypot(it.x-e.x,it.z-e.z)<14) hostPickup(e, it); }
 }
@@ -1008,7 +1052,8 @@ function renderEnts(dt){
       const k=Math.min(1,12*dt); e.x+=(e.tx-e.x)*k; e.z+=(e.tz-e.z)*k; e.y+=(e.ty-e.y)*k; e.heading+=Math.atan2(Math.sin(e.th-e.heading),Math.cos(e.th-e.heading))*k; }
     const ground=terrainH(e.x,e.z), hover=0.9+Math.sin(G.t*7+e.x)*0.06;
     e.mesh.position.set(e.x, ground+hover+e.y, e.z);
-    e.mesh.rotation.set(e.y>0? -e.vy*0.03 : e.speed*-0.004, e.heading, -e.lean);
+    const fa = e.flipping ? e.flipA : (e.rflip||0); const flipX = fa>0 && fa<1 ? -fa*Math.PI*2 : 0;
+    e.mesh.rotation.set(flipX || (e.y>0? -e.vy*0.03 : e.speed*-0.004), e.heading, -e.lean);
     e.mesh.getObjectByName('shadow').position.y = -(hover+e.y)+0.06;
     const spd=Math.min(1,Math.abs(e.speed)/28), ud=e.mesh.userData;
     if(ud.rotors) for(const r of ud.rotors) r.rotation.z += dt*(6+spd*40+(e.boost>0?30:0));
@@ -1087,7 +1132,7 @@ function frame(now){
   if(G && G.running && !paused){
     if(G.isHost){ const steps = humansAlive().length===0 && !G.over ? 6 : 1; for(let i=0;i<steps;i++) hostSim(dt); if(net.online){ G.sendAcc+=dt; if(G.sendAcc>=0.1){ G.sendAcc=0; net.broadcast(snapshot()); } } }
     else { const e=G.ents[G.localId]; if(e&&e.alive){ movePhysics(e, keys2input(), dt);
-        for(const it of G.items){ if(it.alive && e.y<2.5 && Math.hypot(it.x-e.x,it.z-e.z)<2.8){ it.alive=false; it.mesh.visible=false; net.sendHost({t:'take', i:it.id}); } } G.sendAcc+=dt; if(G.sendAcc>=0.067 && net.online){ G.sendAcc=0; try{ net.sendHost({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes, cc:e.closeCalls||0}); e.crashes=0; e.closeCalls=0; }catch(err){} } } }
+        for(const it of G.items){ if(it.alive && e.y<2.5 && Math.hypot(it.x-e.x,it.z-e.z)<2.8){ it.alive=false; it.mesh.visible=false; net.sendHost({t:'take', i:it.id}); } } G.sendAcc+=dt; if(G.sendAcc>=0.067 && net.online){ G.sendAcc=0; try{ net.sendHost({t:'in', x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), cr:e.crashes, cc:e.closeCalls||0, jc:e.jumpCost||0, fa:+(e.flipA||0).toFixed(2)}); e.crashes=0; e.closeCalls=0; e.jumpCost=0; }catch(err){} } } }
     renderEnts(dt);
     let view = G.ents[G.localId];
     if(!view || !view.alive){ if(!G.spectate || !G.ents[G.spectate] || !G.ents[G.spectate].alive){ const a=aliveRiders(); G.spectate = a.length? a[0].id : null; } view = G.spectate? G.ents[G.spectate] : view;
@@ -1116,7 +1161,7 @@ if(isTouch){ document.body.classList.add('touch'); $('touchTip').style.display='
   function onEnd(e){ e.preventDefault();
     for(const t of e.changedTouches){
       if(lt && t.identifier===lt.id){ lt=null; touch.steer=0; stick.style.display='none'; }
-      if(rt && t.identifier===rt.id){ clearTimeout(rt.timer); if(!rt.braking){ touch.jump=true; } touch.brake=false; rt=null; fx.style.display='none'; } } }
+      if(rt && t.identifier===rt.id){ clearTimeout(rt.timer); if(!rt.braking){ requestJump(); } touch.brake=false; rt=null; fx.style.display='none'; } } }
   tz.addEventListener('touchstart', onStart, {passive:false}); tz.addEventListener('touchmove', onMove, {passive:false});
   tz.addEventListener('touchend', onEnd, {passive:false}); tz.addEventListener('touchcancel', onEnd, {passive:false});
   const tb=$('tomBtn'); tb.addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); pressKey('f'); }, {passive:false});
@@ -1127,7 +1172,9 @@ function pressKey(k){ if(!G || !G.running) return;
   if(k==='f'){ const me2=G.ents[G.localId]; if(me2&&me2.alive&&me2.tomatoes>0){ if(G.isHost) hostThrow(me2); else if(net.online) net.sendHost({t:'throw'}); } }
   if(k==='tab'){ const a=aliveRiders(); if(a.length){ const i=a.findIndex(x=>x.id===G.spectate); G.spectate=a[(i+1)%a.length].id; } } }
 // ---------- input ----------
-addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true;
+let lastJumpTap=0; const jumpReq={jump:false, flip:false};
+function requestJump(){ const now=performance.now(); if(now-lastJumpTap<340) jumpReq.flip=true; jumpReq.jump=true; lastJumpTap=now; }
+addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(k===' ' && !e.repeat && G && G.running) requestJump();
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
   if(k==='p' && !net.online){ paused=!paused; $('pause').style.display=paused?'flex':'none'; if(!paused) lastFrame=performance.now(); }
@@ -1179,6 +1226,7 @@ function resize(){ const w=innerWidth, h=innerHeight; renderer.setSize(w,h,false
 addEventListener('resize', resize); resize();
 camera.position.set(0,6,-12); camera.lookAt(0,1,0);
 requestAnimationFrame(frame);
+window.__sf = { FOODS, world, camera, terrainH, buildDrink, buildCherry, buildTomato }; // dev handle for screenshots
 })();
 </script>
 </body>
