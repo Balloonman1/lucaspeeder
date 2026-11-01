@@ -1,6 +1,6 @@
 # Speeder Forager
 
-A 3D hover-bike survival race on planet Veyra-9, created by a 7-year-old game developer. Up to 10 riders per race; bots fill any empty seats.
+A 3D hover-bike survival race through the Veyra canyon, created by a 7-year-old game developer. Up to 10 riders per race; bots fill any empty seats.
 
 - Solo against 9 bots, or create a room and share the 4-letter code (or the invite link) with friends.
 - Classic 5-minute races or 90-second quick play. Last rider with energy wins; if the clock runs out, highest energy wins.

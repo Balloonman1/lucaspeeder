@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="description" content="Speeder Forager: a 3D hover-bike survival race on planet Veyra-9, created by a 7-year-old game developer. Up to 10 riders, bots fill empty seats.">
+<meta name="description" content="Speeder Forager: a 3D hover-bike survival race through the Veyra canyon, created by a 7-year-old game developer. Up to 10 riders, bots fill empty seats.">
 <title>Speeder Forager</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Exo+2:wght@400;600;700&display=swap">
 <style>
@@ -213,7 +213,7 @@ body.touch.portrait.playing #rotate{display:flex}
 <div id="start" class="overlay"><div class="card">
   <span class="tag">A game by a 7-year-old developer</span>
   <h1>Speeder Forager</h1>
-  <p class="sub">Planet Veyra-9, year 2412. Ten riders, one food supply. Last scout with energy left wins.</p>
+  <p class="sub">The Veyra canyon, year 2412. Ten riders, one food supply, miles of dusty trail. Last scout with energy left wins.</p>
   <div class="bests" id="bests"></div>
   <h2>Your rider</h2>
   <input type="text" id="nameIn" maxlength="14" placeholder="Rider name" autocomplete="off">
@@ -314,60 +314,88 @@ const scene = new T.Scene();
 scene.background = new T.Color(0x2a0f4a);
 scene.fog = new T.Fog(0x2a0f4a, 70, 260);
 const camera = new T.PerspectiveCamera(70, 1, 0.1, 1400);
-const hemi = new T.HemisphereLight(0xff9ae0, 0x1f3a3a, 0.75); scene.add(hemi);
+const hemi = new T.HemisphereLight(0xbfdcff, 0x8a5a3a, 0.75); scene.add(hemi);
 const sun = new T.DirectionalLight(0xffd9a8, 1.1); sun.position.set(-120, 180, -60); scene.add(sun); scene.add(sun.target);
 sun.castShadow = Q.shadows; sun.shadow.mapSize.set(Q.shadowMap||1024, Q.shadowMap||1024);
 sun.shadow.camera.near=1; sun.shadow.camera.far=400; sun.shadow.camera.left=-70; sun.shadow.camera.right=70; sun.shadow.camera.top=70; sun.shadow.camera.bottom=-70; sun.shadow.bias=-0.0008; sun.shadow.normalBias=0.4;
-const fill = new T.DirectionalLight(0x6ad5ff, 0.25); fill.position.set(100, 60, 120); scene.add(fill);
+const fill = new T.DirectionalLight(0x9ac8ff, 0.25); fill.position.set(100, 60, 120); scene.add(fill);
 const world = new T.Group(); scene.add(world); // everything rebuilt per match
 function applyQuality(name){ qualityName=name; Q=QUALITY[name]; try{ localStorage.setItem('speederQuality',name); }catch(e){}
   renderer.setPixelRatio(Q.px); renderer.shadowMap.enabled=Q.shadows; sun.castShadow=Q.shadows; if(Q.shadowMap){ sun.shadow.mapSize.set(Q.shadowMap,Q.shadowMap); if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } }
   scene.traverse(o=>{ if(o.material) o.material.needsUpdate=true; }); buildEnvironment(); }
 
-function terrainH(x, z){ return 2.4*Math.sin(x*0.035)*Math.cos(z*0.03) + 1.3*Math.sin(x*0.09+z*0.07) + 0.6*Math.sin(z*0.15)*Math.cos(x*0.12); }
+// trails: a winding main trail east-west, a north-south trail and a diagonal; terrain is carved down along them
+const TRAILS = [ (x,z)=>Math.abs(z - 70*Math.sin(x*0.011) - 10), (x,z)=>Math.abs(x - 80*Math.sin(z*0.013) + 30), (x,z)=>Math.abs((z-x*0.6) - 50*Math.sin((x+z)*0.009) + 60) ];
+function trailDist(x,z){ let d=1e9; for(const f of TRAILS) d=Math.min(d, f(x,z)); return d; }
+const smooth = (a,b,t)=>{ t=T.MathUtils.clamp((t-a)/(b-a),0,1); return t*t*(3-2*t); };
+function terrainH(x, z){
+  const roll = 2.2*Math.sin(x*0.03)*Math.cos(z*0.026) + 1.1*Math.sin(x*0.08+z*0.06) + 0.5*Math.sin(z*0.15)*Math.cos(x*0.12);
+  const r = Math.max(Math.abs(x),Math.abs(z))/HALF;
+  const rim = smooth(0.78, 1.0, r)*22 + smooth(0.9,1.0,r)*18;          // valley walls rising toward the edge
+  const carve = -1.6*Math.exp(-Math.pow(trailDist(x,z)/9,2));          // dusty trail carved into the ground
+  return roll + rim + carve;
+}
 function noiseTexture(size, fn){ const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d'); const img=ctx.createImageData(size,size); const d=img.data;
   for(let y=0;y<size;y++) for(let x=0;x<size;x++){ const i=(y*size+x)*4; const [r,g,b]=fn(x/size,y/size); d[i]=r; d[i+1]=g; d[i+2]=b; d[i+3]=255; } ctx.putImageData(img,0,0);
   const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; t.anisotropy=Q.aniso; return t; }
 const hash2 = (x,y)=>{ const s=Math.sin(x*127.1+y*311.7)*43758.5453; return s-Math.floor(s); };
 function vnoise(x,y){ const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi; const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
   return T.MathUtils.lerp(T.MathUtils.lerp(hash2(xi,yi),hash2(xi+1,yi),u), T.MathUtils.lerp(hash2(xi,yi+1),hash2(xi+1,yi+1),u), v); }
-const groundTex = noiseTexture(512, (u,v)=>{ const n=vnoise(u*24,v*24)*.6+vnoise(u*96,v*96)*.3+vnoise(u*300,v*300)*.1; const c=170+n*85; return [c*0.78, c, c*0.92]; });
-groundTex.repeat.set(26,26); groundTex.encoding=T.sRGBEncoding;
+const groundTex = noiseTexture(512, (u,v)=>{ const n=vnoise(u*24,v*24)*.55+vnoise(u*96,v*96)*.3+vnoise(u*300,v*300)*.15; const c=165+n*90; return [c, c*0.96, c*0.9]; });
+groundTex.repeat.set(30,30); groundTex.encoding=T.sRGBEncoding;
 const groundBump = noiseTexture(256, (u,v)=>{ const n=vnoise(u*60,v*60)*.5+vnoise(u*200,v*200)*.5; const c=n*255; return [c,c,c]; }); groundBump.repeat.set(40,40);
 (function buildTerrain(){
   const g = new T.PlaneGeometry(WORLD, WORLD, 150, 150); g.rotateX(-Math.PI/2);
   const p = g.attributes.position, cols = [];
-  const a = new T.Color(0x1d6b6a), b = new T.Color(0x7bd1b9), c = new T.Color(0xc98aff);
+  const sand = new T.Color(0xd8b07a), sandDark = new T.Color(0xb98d5a), grass = new T.Color(0x6e9a3a), grass2 = new T.Color(0x9bb84c), rock = new T.Color(0xb3633b), rockHi = new T.Color(0xd9915c), scrub = new T.Color(0x8a8f4a);
   for(let i=0;i<p.count;i++){ const x=p.getX(i), z=p.getZ(i), h=terrainH(x,z); p.setY(i,h);
-    const t = T.MathUtils.clamp((h+3)/7, 0, 1); const col = t<0.6 ? a.clone().lerp(b, t/0.6) : b.clone().lerp(c, (t-0.6)/0.4); cols.push(col.r, col.g, col.b); }
+    const slope = Math.hypot(terrainH(x+2,z)-terrainH(x-2,z), terrainH(x,z+2)-terrainH(x,z-2))/4;
+    const trail = Math.exp(-Math.pow(trailDist(x,z)/8,2)); const n = vnoise(x*0.05+50, z*0.05+50);
+    let col = grass.clone().lerp(grass2, n).lerp(scrub, smooth(0.3,0.7,vnoise(x*0.02,z*0.02)));
+    col.lerp(n>0.5?sand:sandDark, smooth(0.15,0.75,trail));                      // dusty trail
+    col.lerp(rock, smooth(0.35,0.9,slope));                                        // steep ground shows stone
+    col.lerp(h>8 ? rockHi : rock, smooth(6,16,h));                                 // valley walls
+    cols.push(col.r, col.g, col.b); }
   g.setAttribute('color', new T.Float32BufferAttribute(cols, 3)); g.computeVertexNormals();
-  const ground = new T.Mesh(g, new T.MeshStandardMaterial({vertexColors:true, map:groundTex, bumpMap:groundBump, bumpScale:0.35, roughness:0.95, metalness:0.0}));
+  const ground = new T.Mesh(g, new T.MeshStandardMaterial({vertexColors:true, map:groundTex, bumpMap:groundBump, bumpScale:0.3, roughness:0.96, metalness:0.0}));
   ground.receiveShadow = true; scene.add(ground);
-  const grid = new T.GridHelper(WORLD, 52, 0x4df0e0, 0x4df0e0); grid.material.transparent = true; grid.material.opacity = 0.06; grid.position.y = 0.05; scene.add(grid);
-  // distant mountain ring (outside the play area)
-  const mg = new T.Group(); const mm = new T.MeshStandardMaterial({color:0x3a1f5e, roughness:1, flatShading:true});
-  for(let i=0;i<46;i++){ const a=i/46*Math.PI*2+Math.sin(i*3.7)*0.05; const r=HALF+170+Math.sin(i*2.3)*50; const h=30+Math.abs(Math.sin(i*1.7))*70; const w=55+Math.abs(Math.cos(i*2.9))*45;
-    const m=new T.Mesh(new T.ConeGeometry(w,h,6), mm); m.position.set(Math.cos(a)*r, h/2-6, Math.sin(a)*r); m.rotation.y=i; mg.add(m);
-    if(i%3===0){ const cap=new T.Mesh(new T.ConeGeometry(w*0.35,h*0.32,6), new T.MeshStandardMaterial({color:0xe8d6ff, roughness:.8, flatShading:true})); cap.position.set(m.position.x, h-h*0.16-6, m.position.z); cap.rotation.y=i; mg.add(cap); } }
-  scene.add(mg);
+  // layered canyon walls just beyond the play boundary, and mesas far off for depth
+  const mg = new T.Group(); const bands=[0xb65d36,0xd48b55,0xa24d2c,0xe0a26c,0xc46f42];
+  function slab(x,z,w,d,h,rot){ const stack=new T.Group(); let y=0; let k=0; const segs=5+Math.floor(Math.random()*3); while(y<h){ const bh=1.0+Math.random()*2.6; const taper=1-(y/h)*0.25; const m=new T.Mesh(new T.CylinderGeometry(w*0.5*taper*(0.92+Math.random()*0.16), w*0.5*taper*(0.95+Math.random()*0.1), bh, segs), new T.MeshStandardMaterial({color:bands[k++%bands.length], roughness:.95, flatShading:true})); m.scale.z=d/w; m.rotation.y=Math.random()*0.6; m.position.set((Math.random()-.5)*1.5, y+bh/2, (Math.random()-.5)*1.5); stack.add(m); y+=bh*0.9; } stack.position.set(x, terrainH(x,z)-3, z); stack.rotation.y=rot; return stack; }
+  for(let i=0;i<72;i++){ const a=i/72*Math.PI*2; const r=HALF+12+Math.random()*34; const x=Math.cos(a)*r, z=Math.sin(a)*r; mg.add(slab(x,z, 26+Math.random()*26, 16+Math.random()*12, 12+Math.random()*30, a+Math.PI/2)); }
+  for(let i=0;i<22;i++){ const a=i/22*Math.PI*2+0.1; const r=HALF+150+Math.random()*160; const x=Math.cos(a)*r, z=Math.sin(a)*r; const h=40+Math.random()*70, w=50+Math.random()*60;
+    const body=new T.Mesh(new T.CylinderGeometry(w*0.7, w, h, 7), new T.MeshStandardMaterial({color:bands[i%bands.length], roughness:1, flatShading:true})); body.position.set(x, h/2-8, z); body.rotation.y=i; mg.add(body);
+    const cap=new T.Mesh(new T.CylinderGeometry(w*0.6, w*0.72, h*0.12, 7), new T.MeshStandardMaterial({color:0xe6b27e, roughness:1, flatShading:true})); cap.position.set(x, h-8+h*0.06, z); cap.rotation.y=i; mg.add(cap); }
+  mg.traverse(o=>{ if(o.isMesh){ o.castShadow=false; o.receiveShadow=true; } }); scene.add(mg);
 })();
 // environment dressing rebuilt on quality change: alien plants (instanced) and clouds
 const env = new T.Group(); scene.add(env);
 function buildEnvironment(){
   while(env.children.length) env.remove(env.children[0]);
   if(Q.plants>0){ // instanced glowing grass tufts and mushroom stalks
-    const tuft = new T.ConeGeometry(0.35, 1.6, 4); tuft.translate(0,0.8,0);
-    const tm = new T.MeshStandardMaterial({color:0x6af0c8, emissive:0x104b40, roughness:.7, flatShading:true});
-    const inst = new T.InstancedMesh(tuft, tm, Q.plants); const o=new T.Object3D(); let n=0;
-    while(n<Q.plants){ const x=rand(-HALF+6,HALF-6), z=rand(-HALF+6,HALF-6); if(Math.hypot(x,z)<30) continue; const h=terrainH(x,z); if(h<-1.2) continue;
-      o.position.set(x,h-0.1,z); o.rotation.set(rand(-.2,.2),rand(0,6.28),rand(-.2,.2)); const sc=rand(.6,1.5); o.scale.set(sc,sc*rand(.8,1.6),sc); o.updateMatrix(); inst.setMatrixAt(n++, o.matrix); }
-    inst.instanceMatrix.needsUpdate=true; inst.castShadow=false; inst.receiveShadow=true; env.add(inst);
-    const cap = new T.SphereGeometry(0.9, 10, 8, 0, 6.3, 0, 1.6); cap.translate(0,2.2,0); const stalk = new T.CylinderGeometry(0.18,0.3,2.2,8); stalk.translate(0,1.1,0);
-    const capM = new T.MeshStandardMaterial({color:0xff6ad5, emissive:0x5a1a4a, roughness:.5}); const stalkM = new T.MeshStandardMaterial({color:0xf0e6ff, roughness:.8});
-    const nm = Math.floor(Q.plants/12); const caps=new T.InstancedMesh(cap, capM, nm), stalks=new T.InstancedMesh(stalk, stalkM, nm); let k=0;
-    while(k<nm){ const x=rand(-HALF+10,HALF-10), z=rand(-HALF+10,HALF-10); if(Math.hypot(x,z)<34) continue; if(obstacles.some(ob=>Math.hypot(ob.x-x,ob.z-z)<ob.r+3)) continue;
-      o.position.set(x,terrainH(x,z)-0.2,z); o.rotation.set(0,rand(0,6.28),0); const sc=rand(.7,1.4); o.scale.set(sc,sc,sc); o.updateMatrix(); caps.setMatrixAt(k,o.matrix); stalks.setMatrixAt(k,o.matrix); k++; }
-    caps.instanceMatrix.needsUpdate=stalks.instanceMatrix.needsUpdate=true; caps.castShadow=stalks.castShadow=Q.shadows; env.add(caps); env.add(stalks); }
+    const o=new T.Object3D();
+    const offTrail = (x,z)=> trailDist(x,z)>7 && terrainH(x,z)<7 && Math.hypot(x,z)>26;
+    // grass tufts: crossed blades, green to straw colors, kept off the trails
+    const blade = new T.ConeGeometry(0.22, 1.3, 3); blade.translate(0,0.6,0); const blade2=blade.clone(); blade2.rotateY(Math.PI/2); const tuft = T.BufferGeometryUtils ? T.BufferGeometryUtils.mergeBufferGeometries([blade,blade2]) : blade;
+    const gm = new T.MeshStandardMaterial({color:0xffffff, roughness:.9, flatShading:true, side:T.DoubleSide});
+    const inst = new T.InstancedMesh(tuft, gm, Q.plants); let n=0; const gc=new T.Color();
+    while(n<Q.plants){ const x=rand(-HALF+6,HALF-6), z=rand(-HALF+6,HALF-6); if(!offTrail(x,z)) continue; const h=terrainH(x,z);
+      o.position.set(x,h-0.15,z); o.rotation.set(rand(-.25,.25),rand(0,6.28),rand(-.25,.25)); const sc=rand(.7,1.6); o.scale.set(sc,sc*rand(.7,1.5),sc); o.updateMatrix(); inst.setMatrixAt(n, o.matrix);
+      gc.setHSL(0.2+rand(-0.06,0.08), rand(.35,.6), rand(.3,.5)); inst.setColorAt(n, gc); n++; }
+    inst.instanceMatrix.needsUpdate=true; if(inst.instanceColor) inst.instanceColor.needsUpdate=true; inst.castShadow=false; inst.receiveShadow=true; env.add(inst);
+    // scrub bushes
+    const bushG = new T.IcosahedronGeometry(1,1); bushG.translate(0,0.7,0); const bushM = new T.MeshStandardMaterial({color:0xffffff, roughness:.95, flatShading:true});
+    const nb = Math.floor(Q.plants/14); const bushes = new T.InstancedMesh(bushG, bushM, nb); let b=0;
+    while(b<nb){ const x=rand(-HALF+10,HALF-10), z=rand(-HALF+10,HALF-10); if(!offTrail(x,z) || obstacles.some(ob=>Math.hypot(ob.x-x,ob.z-z)<ob.r+3)) continue;
+      o.position.set(x,terrainH(x,z)-0.3,z); o.rotation.set(0,rand(0,6.28),0); const sc=rand(.8,1.8); o.scale.set(sc*rand(1,1.5),sc*0.8,sc); o.updateMatrix(); bushes.setMatrixAt(b,o.matrix); gc.setHSL(0.19+rand(-0.05,0.05), rand(.3,.5), rand(.22,.36)); bushes.setColorAt(b,gc); b++; }
+    bushes.instanceMatrix.needsUpdate=true; if(bushes.instanceColor) bushes.instanceColor.needsUpdate=true; bushes.castShadow=Q.shadows; bushes.receiveShadow=true; env.add(bushes);
+    // wildflowers in patches: thin stems with colored heads
+    const headG = new T.SphereGeometry(0.16, 6, 5); headG.translate(0,0.75,0); const stemG = new T.CylinderGeometry(0.025,0.03,0.75,4); stemG.translate(0,0.37,0);
+    const nf = Math.floor(Q.plants*0.9); const heads = new T.InstancedMesh(headG, new T.MeshStandardMaterial({color:0xffffff, roughness:.6}), nf), stems = new T.InstancedMesh(stemG, new T.MeshStandardMaterial({color:0x4f7a2a, roughness:.9}), nf);
+    const palette=[0xff4d6d,0xffd23f,0xb06cff,0xffffff,0xff8c42,0xff6ad5,0x4da3ff]; let f=0; let patches=[]; for(let i=0;i<Math.max(6,Q.plants/90);i++){ let px,pz,tries=0; do{ px=rand(-HALF+20,HALF-20); pz=rand(-HALF+20,HALF-20); }while(!offTrail(px,pz) && tries++<30); patches.push([px,pz,palette[i%palette.length],palette[(i*3+1)%palette.length]]); }
+    while(f<nf){ const pt=patches[f%patches.length]; const x=pt[0]+rand(-12,12), z=pt[1]+rand(-12,12); if(!offTrail(x,z) || Math.abs(x)>HALF-8 || Math.abs(z)>HALF-8) { f++; continue; }
+      o.position.set(x,terrainH(x,z)-0.1,z); o.rotation.set(rand(-.2,.2),rand(0,6.28),rand(-.2,.2)); const sc=rand(.7,1.3); o.scale.set(sc,sc,sc); o.updateMatrix(); heads.setMatrixAt(f,o.matrix); stems.setMatrixAt(f,o.matrix); gc.setHex(Math.random()<.7?pt[2]:pt[3]); heads.setColorAt(f,gc); f++; }
+    heads.instanceMatrix.needsUpdate=stems.instanceMatrix.needsUpdate=true; if(heads.instanceColor) heads.instanceColor.needsUpdate=true; heads.castShadow=stems.castShadow=false; env.add(heads); env.add(stems); }
   // soft clouds: layered sprites drifting slowly
   env.clouds=[]; const ct = (()=>{ const c=document.createElement('canvas'); c.width=c.height=128; const x=c.getContext('2d'); const g=x.createRadialGradient(64,64,10,64,64,64); g.addColorStop(0,'rgba(255,255,255,.9)'); g.addColorStop(.5,'rgba(255,255,255,.35)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,128,128); return new T.CanvasTexture(c); })();
   for(let i=0;i<Q.clouds;i++){ const g=new T.Group(); const n=3+Math.floor(Math.random()*4); for(let j=0;j<n;j++){ const sp=new T.Sprite(new T.SpriteMaterial({map:ct, transparent:true, opacity:.55, depthWrite:false, fog:false})); const w=rand(40,90); sp.scale.set(w,w*0.5,1); sp.position.set(rand(-50,50), rand(-8,8), rand(-20,20)); g.add(sp); }
@@ -379,12 +407,12 @@ const sky = {}; const sunDir = new T.Vector3(0.5,0.8,-0.5);
 (function buildSky(){
   sky.sun = new T.Mesh(new T.SphereGeometry(34, 24, 24), new T.MeshBasicMaterial({color:0xfff1b0, fog:false})); scene.add(sky.sun);
   sky.halo = new T.Mesh(new T.SphereGeometry(52, 24, 24), new T.MeshBasicMaterial({color:0xffa04d, fog:false, transparent:true, opacity:.25})); scene.add(sky.halo);
-  sky.moon = new T.Mesh(new T.SphereGeometry(26, 24, 24), new T.MeshBasicMaterial({color:0xffc2ec, fog:false})); scene.add(sky.moon);
+  sky.moon = new T.Mesh(new T.SphereGeometry(26, 24, 24), new T.MeshBasicMaterial({color:0xf2eee0, fog:false})); scene.add(sky.moon);
   sky.moon2 = new T.Mesh(new T.SphereGeometry(12, 24, 24), new T.MeshBasicMaterial({color:0x9ef5ff, fog:false})); sky.moon2.position.set(260, 220, -480); scene.add(sky.moon2);
   const pts = []; for(let i=0;i<700;i++){ const r=800, th=Math.random()*Math.PI*2, ph=Math.random()*Math.PI*0.45; pts.push(r*Math.cos(th)*Math.cos(ph), r*Math.sin(ph)+40, r*Math.sin(th)*Math.cos(ph)); }
   const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(pts,3));
   sky.stars = new T.Points(sg, new T.PointsMaterial({color:0xffffff, size:2, sizeAttenuation:false, fog:false, transparent:true})); scene.add(sky.stars);
-  sky.day = new T.Color(0xffa3c4); sky.dusk = new T.Color(0xff7a4a); sky.night = new T.Color(0x24103f);
+  sky.day = new T.Color(0x8fc3f0); sky.dusk = new T.Color(0xff8c4a); sky.night = new T.Color(0x16142e);
 })();
 function updateSky(clock){ // 0 midnight, .25 sunrise, .5 noon, .75 sunset
   const sunY = Math.sin((clock-0.25)*Math.PI*2), sunX = -Math.cos((clock-0.25)*Math.PI*2);
@@ -392,11 +420,11 @@ function updateSky(clock){ // 0 midnight, .25 sunrise, .5 noon, .75 sunset
   sky.moon.position.set(-sunX*600, -sunY*380+20, -520);
   sky.sun.visible = sky.halo.visible = sunY > -0.12; sky.moon.visible = sunY < 0.12;
   const daylight = T.MathUtils.clamp(sunY*2.2, 0, 1), duskness = T.MathUtils.clamp(1-Math.abs(sunY)*3.5, 0, 1);
-  const col = sky.night.clone().lerp(sky.day, daylight).lerp(sky.dusk, duskness*0.75);
-  scene.background.copy(col); scene.fog.color.copy(col);
+  const col = sky.night.clone().lerp(sky.day, daylight).lerp(sky.dusk, duskness*0.7);
+  scene.background.copy(col); scene.fog.color.copy(col).lerp(new T.Color(0xf2d9b8), daylight*0.35);
   scene.fog.near = 90 + daylight*80; scene.fog.far = 380 + daylight*320;
   sun.intensity = 0.25 + daylight*1.0; hemi.intensity = 0.45 + daylight*0.5;
-  sun.color.setHex(daylight>0.5?0xfff2d6:0xffb080); sunDir.set(sunX, Math.max(0.3,sunY), -0.5).normalize();
+  sun.color.setHex(daylight>0.5?0xfff1d8:0xffa860); hemi.color.setHex(daylight>0.5?0xbfdcff:0x6b5a9a); sunDir.set(sunX, Math.max(0.3,sunY), -0.5).normalize();
   sky.stars.material.opacity = 1-daylight; sky.moon2.visible = daylight < 0.9;
   sky.sun.material.color.setHex(daylight>0.4?0xfff6d0:0xffb070); fill.intensity = 0.1 + daylight*0.25;
   renderer.toneMappingExposure = 0.9 + daylight*0.25;
@@ -423,24 +451,24 @@ let obstacles = [];
 function buildObstacles(){
   obstacles = [];
   const rockG = new T.DodecahedronGeometry(1, 1); { const pa=rockG.attributes.position; for(let i=0;i<pa.count;i++){ const v=new T.Vector3().fromBufferAttribute(pa,i); v.multiplyScalar(0.85+srand()*0.3); pa.setXYZ(i,v.x,v.y,v.z); } rockG.computeVertexNormals(); }
-  const rockM = new T.MeshStandardMaterial({color:0x5a3578, roughness:.9, flatShading:true}), rockM2 = new T.MeshStandardMaterial({color:0x7a4aa8, roughness:.85, flatShading:true});
-  const crysM = new T.MeshPhysicalMaterial({color:0x7cf7ea, emissive:0x1f9c90, emissiveIntensity:.9, roughness:.08, metalness:0, transmission:.35, transparent:true, opacity:.92});
-  const towM = metal(0x3a2650,{roughness:.45}), ringM = glowMat(0xff6ad5);
+  const rockM = new T.MeshStandardMaterial({color:0xb86a42, roughness:.95, flatShading:true}), rockM2 = new T.MeshStandardMaterial({color:0x8f5a44, roughness:.95, flatShading:true});
+  const hoodooM = [0xc98a5a,0xa8603a,0xdca470,0x9c4f2f].map(c=>new T.MeshStandardMaterial({color:c, roughness:.95, flatShading:true}));
+  const towM = new T.MeshStandardMaterial({color:0x6b5a52, roughness:.8, metalness:.15}), ringM = glowMat(0x4df0e0);
   function place(minR){ for(let k=0;k<40;k++){ const x=srange(-HALF+15,HALF-15), z=srange(-HALF+15,HALF-15); if(Math.hypot(x,z)<28) continue;
       if(obstacles.every(o=>Math.hypot(o.x-x,o.z-z)>o.r+minR+4)) return [x,z]; } return null; }
   for(let i=0;i<110;i++){ const p=place(3); if(!p) continue; const r=srange(1.4,3.6);
     const m=new T.Mesh(rockG, srand()<.5?rockM:rockM2); m.scale.set(r, r*srange(.7,1.2), r); m.rotation.set(srange(0,3),srange(0,3),srange(0,3));
     m.position.set(p[0], terrainH(p[0],p[1])+r*0.3, p[1]); shadowify(m); world.add(m); obstacles.push({x:p[0],z:p[1],r:r*0.95,h:Math.min(r*1.3,3.2)}); }
-  for(let i=0;i<45;i++){ const p=place(3); if(!p) continue; const g=new T.Group(); const n=2+Math.floor(srand()*3); let maxH=0;
-    for(let j=0;j<n;j++){ const h=srange(2.5,6), c=new T.Mesh(new T.ConeGeometry(srange(.5,1.1),h,5), crysM); c.position.set(srange(-1,1),h/2,srange(-1,1)); c.rotation.z=srange(-.25,.25); g.add(c); maxH=Math.max(maxH,h); }
-    const lightDot=new T.PointLight(0x4df0e0, 0.6, 14); lightDot.position.y=2; if(Q.shadows && srand()<0.3) g.add(lightDot);
+  for(let i=0;i<45;i++){ const p=place(3); if(!p) continue; const g=new T.Group(); const n=1+Math.floor(srand()*2); let maxH=0;
+    for(let j=0;j<n;j++){ const h=srange(2.5,5.5); let y=0, k=0; const ox=srange(-.8,.8), oz=srange(-.8,.8); while(y<h){ const bh=srange(.6,1.3), rr=srange(.6,1.1)*(1-y/h*0.35); const c=new T.Mesh(new T.CylinderGeometry(rr*srange(.85,1), rr, bh, 7), hoodooM[k++%hoodooM.length]); c.position.set(ox+srange(-.1,.1), y+bh/2, oz+srange(-.1,.1)); c.rotation.y=srand()*3; g.add(c); y+=bh*0.95; } maxH=Math.max(maxH,h);
+      const cap=new T.Mesh(new T.DodecahedronGeometry(srange(.9,1.3),0), rockM2); cap.position.set(ox, y+0.3, oz); cap.scale.y=.6; g.add(cap); }
     g.position.set(p[0], terrainH(p[0],p[1])-0.2, p[1]); shadowify(g); world.add(g); obstacles.push({x:p[0],z:p[1],r:2.0,h:Math.min(maxH,3.4)}); }
   for(let i=0;i<14;i++){ const p=place(5); if(!p) continue; const h=srange(14,24); const g=new T.Group();
-    g.add(new T.Mesh(new T.CylinderGeometry(1.6,2.6,h,8), towM)).position.y=h/2;
-    const ring=new T.Mesh(new T.TorusGeometry(2.4,.18,8,24), ringM); ring.rotation.x=Math.PI/2; ring.position.y=h*0.8; g.add(ring);
-    const ring2=ring.clone(); ring2.position.y=h*0.55; ring2.scale.setScalar(.8); g.add(ring2);
-    const beacon=new T.Mesh(new T.SphereGeometry(.7,12,12), glowMat(0xffffff)); beacon.position.y=h+0.6; g.add(beacon);
-    const fins=new T.Mesh(new T.BoxGeometry(6,.3,.6), towM); fins.position.y=h*0.3; g.add(fins); const fins2=fins.clone(); fins2.rotation.y=Math.PI/2; g.add(fins2);
+    g.add(new T.Mesh(new T.CylinderGeometry(1.4,2.8,h,6), towM)).position.y=h/2;
+    const ring=new T.Mesh(new T.TorusGeometry(2.2,.12,8,24), ringM); ring.rotation.x=Math.PI/2; ring.position.y=h*0.8; g.add(ring);
+    const ring2=ring.clone(); ring2.position.y=h*0.55; ring2.scale.setScalar(.85); g.add(ring2);
+    const beacon=new T.Mesh(new T.OctahedronGeometry(.8,0), glowMat(0x9ff5ff)); beacon.position.y=h+0.9; g.add(beacon);
+    const base=new T.Mesh(new T.CylinderGeometry(3.2,3.8,1.2,6), rockM2); base.position.y=0.4; g.add(base); const step=new T.Mesh(new T.CylinderGeometry(4.6,5.2,.7,6), rockM); step.position.y=0.1; g.add(step);
     g.userData.spin=true; g.position.set(p[0], terrainH(p[0],p[1]), p[1]); shadowify(g); world.add(g); obstacles.push({x:p[0],z:p[1],r:2.6,h:99, mesh:g}); }
   buildEnvironment();
 }
@@ -535,7 +563,7 @@ function itemMesh(it){
 const routeGeo = new T.BufferGeometry(); routeGeo.setAttribute('position', new T.Float32BufferAttribute(new Float32Array(3*24),3));
 const route = new T.Line(routeGeo, new T.LineDashedMaterial({color:0x4df0e0, dashSize:1.5, gapSize:1, transparent:true, opacity:.8})); scene.add(route);
 const ring = new T.Mesh(new T.TorusGeometry(2.4,.15,8,32), new T.MeshBasicMaterial({color:0x4df0e0})); ring.rotation.x=Math.PI/2; scene.add(ring);
-const dust = []; for(let i=0;i<40;i++){ const s=new T.Sprite(new T.SpriteMaterial({color:0xc98aff, transparent:true, opacity:.5, depthWrite:false})); s.visible=false; scene.add(s); dust.push({s,life:0}); }
+const dust = []; for(let i=0;i<40;i++){ const s=new T.Sprite(new T.SpriteMaterial({color:0xe0c39a, transparent:true, opacity:.5, depthWrite:false})); s.visible=false; scene.add(s); dust.push({s,life:0}); }
 // particle pool: short-lived sprites for sparks, puffs, pickup bursts
 const FX = { pool:[], shake:0, lines:null };
 (function buildFX(){
@@ -934,7 +962,7 @@ function renderEnts(dt){
 function updateCamera(dt, e){
   const ground=terrainH(e.x,e.z);
   sun.target.position.set(e.x, 0, e.z); const sd=sun.position; sun.position.set(e.x+sunDir.x*160, Math.max(60,sunDir.y*180), e.z+sunDir.z*160);
-  const camBack = 9 + Math.abs(e.speed)*0.12, up = 4.2 + e.y*0.5;
+  const camBack = 9.5 + Math.abs(e.speed)*0.14, up = 3.6 + e.y*0.5;
   const cx = e.x - Math.sin(e.heading)*camBack, cz = e.z - Math.cos(e.heading)*camBack;
   const cy = Math.max(terrainH(cx,cz)+2.2, ground+up);
   camera.position.lerp(new T.Vector3(cx,cy,cz), Math.min(1, 5*dt));
@@ -945,7 +973,7 @@ function updateCamera(dt, e){
   const tf = (e.boost>0? 86 : 68) + spdN*8; camera.fov += (tf-camera.fov)*Math.min(1,4*dt); camera.updateProjectionMatrix();
   FX.lines.material.opacity += (((e.boost>0?0.5:0)+Math.max(0,spdN-0.7)*1.2) - FX.lines.material.opacity)*Math.min(1,6*dt); FX.lines.rotation.z += dt*(2+spdN*6);
   // landing puff + airborne tracking
-  if(e.id===G.localId){ if(e.wasAir && e.y<=0.001){ spawnFX(e.x, ground+0.3, e.z, 0xd8c8ff, 14, {speed:5, up:1, size:.9, grow:2.5, life:.5}); FX.shake=Math.max(FX.shake,.5); SFX.play('land'); } e.wasAir = e.y>0.05; }
+  if(e.id===G.localId){ if(e.wasAir && e.y<=0.001){ spawnFX(e.x, ground+0.3, e.z, 0xe8d2b0, 14, {speed:5, up:1, size:.9, grow:2.5, life:.5}); FX.shake=Math.max(FX.shake,.5); SFX.play('land'); } e.wasAir = e.y>0.05; }
   updateFX(dt);
   if(Math.abs(e.speed)>6 && e.y<0.1 && e.id===G.localId){ const d=dust.find(d=>d.life<=0); if(d){ d.life=0.7; d.s.visible=true; d.s.position.set(e.x-Math.sin(e.heading)*2+rand(-.6,.6), ground+0.4, e.z-Math.cos(e.heading)*2+rand(-.6,.6)); d.s.scale.setScalar(0.8); } }
   for(const d of dust){ if(d.life>0){ d.life-=dt; d.s.material.opacity=d.life*0.6; d.s.scale.addScalar(dt*2.5); d.s.position.y+=dt*1.5; if(d.life<=0) d.s.visible=false; } }
@@ -974,7 +1002,7 @@ function updateHUD(e){
 }
 const mapC = $('map').getContext('2d');
 function drawMap(me){
-  const S=300, k=S/WORLD; mapC.clearRect(0,0,S,S); mapC.fillStyle='rgba(29,107,106,.55)'; mapC.fillRect(0,0,S,S);
+  const S=300, k=S/WORLD; mapC.clearRect(0,0,S,S); mapC.fillStyle='rgba(120,90,55,.6)'; mapC.fillRect(0,0,S,S);
   mapC.fillStyle='rgba(255,255,255,.22)'; for(const o of obstacles){ mapC.beginPath(); mapC.arc((o.x+HALF)*k,(o.z+HALF)*k,Math.max(1.5,o.r*k),0,6.28); mapC.fill(); }
   for(const it of G.items){ if(!it.alive) continue; mapC.fillStyle = it.kind==='food'?FOODS[it.type].color : it.kind==='drink'?'#4df0e0': it.kind==='tomato'?'#ff4d2a':'#ff6ad5'; mapC.beginPath(); mapC.arc((it.x+HALF)*k,(it.z+HALF)*k,3.5,0,6.28); mapC.fill(); }
   for(const id of G.order){ const e=G.ents[id]; if(!e.alive||e===me) continue; mapC.fillStyle=e.clone?'#7cff8a':e.bot?'#ff4d6d':e.color; mapC.beginPath(); mapC.arc((e.x+HALF)*k,(e.z+HALF)*k,4,0,6.28); mapC.fill(); }
