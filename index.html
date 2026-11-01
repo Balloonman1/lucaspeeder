@@ -796,12 +796,15 @@ function movePhysics(e, inp, dt){
   e.heading += turnIn*2.3*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
   e.lean += (turnIn*0.38*Math.min(1,Math.abs(e.speed)/10) - e.lean)*Math.min(1,8*dt);
   const grounded = e.y<=0.001 && e.vy<=0;
-  if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? 19 : 14; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0;
+  if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? 19 : 14; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0; e.flipStart=0;
     if(e.speed>4) e.speed = Math.min(e.boost>0?60:34, e.speed + (flip?7:4));                 // a jump launches you forward
     e.jumpCost = (e.jumpCost||0) + (flip?5:2);                                                // and burns energy
     if(e.id===G.localId){ SFX.play(flip?'flip':'jump'); if(flip) announce('BACKFLIP!','boost','-5 energy'); else showMsg('Jump -2 energy','boost'); } }
+  else if(inp.jump && !grounded && !e.flipping && (e.airT||0)<0.45 && e.vy>0){ // second tap right after takeoff: upgrade into a backflip
+    e.vy = Math.max(e.vy, 19 - 24*(e.airT||0)); e.flipping=true; e.flipA=0; e.flipStart=e.airT||0; e.speed=Math.min(e.boost>0?60:34, e.speed+3); e.jumpCost=(e.jumpCost||0)+3;
+    if(e.id===G.localId){ SFX.play('flip'); announce('BACKFLIP!','boost','-5 energy'); } }
   if(!grounded){ e.airT=(e.airT||0)+dt; }
-  if(e.flipping){ const total = 2*19/24; e.flipA = Math.min(1, (e.airT||0)/total); if(grounded && e.airT>0.2){ e.flipping=false; e.flipA=0; } }
+  if(e.flipping){ const st=e.flipStart||0; const total = Math.max(0.6, 2*19/24 - st); e.flipA = Math.min(1, ((e.airT||0)-st)/total); if(grounded && e.airT>0.2){ e.flipping=false; e.flipA=0; e.flipStart=0; } }
   e.vy -= 24*dt; e.y += e.vy*dt; if(e.y<0){ e.y=0; e.vy=0; }
   e.x += Math.sin(e.heading)*e.speed*dt; e.z += Math.cos(e.heading)*e.speed*dt;
   const lim=HALF-10;
@@ -1173,7 +1176,7 @@ function pressKey(k){ if(!G || !G.running) return;
   if(k==='tab'){ const a=aliveRiders(); if(a.length){ const i=a.findIndex(x=>x.id===G.spectate); G.spectate=a[(i+1)%a.length].id; } } }
 // ---------- input ----------
 let lastJumpTap=0; const jumpReq={jump:false, flip:false};
-function requestJump(){ const now=performance.now(); if(now-lastJumpTap<340) jumpReq.flip=true; jumpReq.jump=true; lastJumpTap=now; }
+function requestJump(){ const now=performance.now(); if(now-lastJumpTap<420) jumpReq.flip=true; jumpReq.jump=true; lastJumpTap=now; }
 addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(k===' ' && !e.repeat && G && G.running) requestJump();
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
