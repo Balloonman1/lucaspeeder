@@ -33,7 +33,8 @@
 </div>
 <div id="bl" class="hud panel"><div id="speed">0 <span>KM/H</span></div><div id="boost">⚡ TURBO 0.0s</div><div class="lbl" id="clock" style="margin-top:6px">☀ Sunrise</div></div>
 <div id="br" class="hud panel">W/S drive · A/D steer · SPACE jump<br>F throw tomato · TAB spectate · P pause</div>
-<div id="spect" class="hud panel">YOU'RE OUT · spectating <span id="spectName"></span><br><small style="color:var(--dim)">TAB or tap here to switch rider</small></div>
+<div id="spect" class="hud panel">YOU'RE OUT · spectating <span id="spectName"></span><br><small style="color:var(--dim)">TAB or tap here to switch rider</small><br><button id="exitBtn2" class="ghost mini">Leave race</button></div>
+<button id="exitBtn" class="ghost mini hudbtn" title="Leave race">✕ Leave</button>
 <div id="msgs" class="hud"></div>
 <div id="announce" class="hud"></div>
 <div id="countdown" class="hud"></div>
@@ -60,6 +61,8 @@
   <div class="bests" id="bests"></div>
   <h2>Your rider</h2>
   <input type="text" id="nameIn" maxlength="14" placeholder="Rider name" autocomplete="off">
+  <h2>Place</h2>
+  <div class="vehicles" id="levels"></div>
   <h2>Vehicle</h2>
   <div class="vehicles" id="vehicles"></div>
   <h2>Paint</h2>

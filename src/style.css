@@ -171,3 +171,13 @@ body.touch.portrait.playing #rotate{display:flex}
 .veh .st{display:grid;gap:3px;margin-top:4px}
 .veh .st span{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:grid;grid-template-columns:38px 1fr;align-items:center;gap:6px}
 .veh .st i{display:block;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+
+.veh.lvl small{min-height:2.2em}
+
+button.mini{font-size:11px;padding:7px 12px;letter-spacing:.08em}
+#exitBtn{position:fixed;top:max(14px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));margin-top:174px;z-index:4;display:none;background:rgba(18,10,31,.72);backdrop-filter:blur(6px)}
+body.playing #exitBtn{display:inline-block}
+body.touch #exitBtn{margin-top:98px}
+@media (max-width:640px){#exitBtn{margin-top:8px;right:auto;left:50%;transform:translateX(-50%);top:auto;bottom:max(14px,env(safe-area-inset-bottom,0px))}}
+#spect{pointer-events:auto}
+#exitBtn2{margin-top:8px;pointer-events:auto}

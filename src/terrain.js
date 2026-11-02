@@ -47,7 +47,10 @@ export function buildTerrain() {
   const TILE = 1 / level.tileM;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i), h = terrainH(x, z); p.setY(i, h);
-    if (level.roadUV && trailIndex(x, z) === 1) uv.setXY(i, z * TILE, x * TILE); else uv.setXY(i, x * TILE, z * TILE);
+    if (level.roadUV && trailDist(x, z) <= 0.01) { // road: u spans the street width exactly (lane lines line up), v runs along it
+      const B = level.block, Wd = level.street; const mx = ((x % B) + B) % B - B / 2, mz = ((z % B) + B) % B - B / 2;
+      if (Math.abs(mx) <= Wd / 2 && Math.abs(mz) > Wd / 2) uv.setXY(i, mx / Wd + 0.5, z / Wd); else if (Math.abs(mz) <= Wd / 2) uv.setXY(i, mz / Wd + 0.5, x / Wd); else uv.setXY(i, x * TILE, z * TILE); }
+    else uv.setXY(i, x * TILE, z * TILE);
     const slope = terrainSlope(x, z), td = trailDist(x, z);
     const w = level.weights(x, z, h, slope, td); splat.push(w[0], w[1], w[2], w[3]);
     const n2 = vnoise(x * 0.11 + 7, z * 0.11 + 3); tint.copy(n2 > 0.5 ? tA : tB).lerp(new T.Color(0xffffff), 0.55); cols.push(tint.r, tint.g, tint.b);

@@ -5,6 +5,7 @@ A 3D hover-bike survival race through the Veyra canyon, created by a 7-year-old 
 ## Play
 - Solo against 9 bots, or create a room and share the 4-letter code / invite link.
 - Classic 5-minute races or 90-second quick play. Last rider with energy wins.
+- Three places to race: Veyra Canyon, Kaldris Ice Shelf (slippery, snowfall) and New York City (street grid, Central Park, parked taxis, pizza).
 - Four vehicle classes (Scout, Blitz, Hauler, Hopper) with paint, trim and pattern customization.
 - Food (rice and beans, vegetables, strawberries, raspberries, milk, bagels, toast, french fries, ice cream) restores energy; energy drinks give turbo; cherries spawn a helper clone; tomatoes jam a rival's GPS; jumps (and double-tap backflips) launch you forward but cost energy.
 

@@ -3,6 +3,7 @@ import * as T from 'three';
 import { scene, camera, sun, hemi, fill, renderer, env } from './engine.js';
 import { settings, HALF, rand, clamp } from './config.js';
 import { A } from './assets.js';
+import { level } from './levels.js';
 
 export const sky = {};
 export const sunDir = new T.Vector3(0.5, 0.8, -0.5);
@@ -23,7 +24,9 @@ sky.moon2 = new T.Mesh(new T.SphereGeometry(12, 24, 24), new T.MeshBasicMaterial
   const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
   sky.stars = new T.Points(sg, new T.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false, transparent: true })); scene.add(sky.stars);
 }
-const C = { day: new T.Color(0x8fc3f0), dusk: new T.Color(0xff8c4a), night: new T.Color(0x16142e), fogDay: new T.Color(0xe7d6bd), skyTop: new T.Color(0x3b7dd1), skyHor: new T.Color(0xe4ebf1), duskTop: new T.Color(0x6a3a7a) };
+const C = { day: new T.Color(), dusk: new T.Color(), night: new T.Color(), fogDay: new T.Color(), skyTop: new T.Color(), skyHor: new T.Color(), duskTop: new T.Color() };
+let paletteFor = null;
+function syncPalette(){ if (paletteFor === level.id) return; paletteFor = level.id; const P = level.sky; for (const k of Object.keys(C)) C[k].setHex(P[k]); }
 
 export function setupEnvironment() {
   if (!A.hdri) return;
@@ -44,6 +47,7 @@ export function buildClouds() {
 
 // clock: 0 midnight, .25 sunrise, .5 noon, .75 sunset. Returns daylight 0..1.
 export function updateSky(clock) {
+  syncPalette(); const P = level.sky;
   const sunY = Math.sin((clock - 0.25) * Math.PI * 2), sunX = -Math.cos((clock - 0.25) * Math.PI * 2);
   sky.moon.position.set(-sunX * 600, -sunY * 380 + 20, -520); sky.moon.visible = sunY < 0.12;
   const daylight = clamp(sunY * 2.2, 0, 1), duskness = clamp(1 - Math.abs(sunY) * 3.5, 0, 1);
@@ -51,10 +55,10 @@ export function updateSky(clock) {
   scene.fog.color.copy(col).lerp(C.fogDay, daylight * 0.45);
   scene.fog.near = 90 + daylight * 90; scene.fog.far = 420 + daylight * 380;
   sun.intensity = 0.6 + daylight * 2.8; hemi.intensity = 0.35 + daylight * 0.7; fill.intensity = 0.15 + daylight * 0.4;
-  sun.color.setHex(daylight > 0.5 ? 0xfff1d8 : 0xffa860); hemi.color.setHex(daylight > 0.5 ? 0xcfe3ff : 0x6b5a9a);
+  sun.color.setHex(daylight > 0.5 ? P.sunDay : 0xffa860); hemi.color.setHex(daylight > 0.5 ? P.hemiSky : 0x6b5a9a); hemi.groundColor.setHex(P.hemiGround);
   sunDir.set(sunX, Math.max(0.3, sunY), -0.5).normalize();
   sky.stars.material.opacity = 1 - daylight; sky.moon2.visible = daylight < 0.9;
-  renderer.toneMappingExposure = 0.85 + daylight * 0.3;
+  renderer.toneMappingExposure = (0.85 + daylight * 0.3) * P.exposure;
   if (scene.environment) scene.environmentIntensity = 0.12 + daylight * 0.5;
   domeM.uniforms.top.value.copy(C.night).lerp(C.skyTop, daylight).lerp(C.duskTop, duskness * 0.5);
   domeM.uniforms.horizon.value.copy(C.night).lerp(C.skyHor, daylight).lerp(C.dusk, duskness * 0.85);

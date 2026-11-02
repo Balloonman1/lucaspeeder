@@ -6,7 +6,8 @@ import { A } from './assets.js';
 import { renderer, scene, camera, sun, world, env, renderFrame, applyQualityToEngine } from './engine.js';
 import { updateSky, sunDir, setupEnvironment } from './sky.js';
 import { terrainH, trailDist, buildTerrain, shadowify } from './terrain.js';
-import { obstacles, buildScenery, buildObstacles, buildEnvironment } from './props.js';
+import { obstacles, buildScenery, buildObstacles, buildEnvironment, updateWeather } from './props.js';
+import { LEVELS, LEVEL_KEYS, level, setLevel } from './levels.js';
 import { SFX } from './audio.js';
 import { BIKES, BIKE_KEYS, TRIMS, PATTERNS, statOf, makeBike, labelSprite } from './vehicles.js';
 
@@ -75,6 +76,17 @@ const FOODS = {
     const cherry=new T.Mesh(new T.SphereGeometry(.13,12,10), new T.MeshStandardMaterial({color:0xb3003b, roughness:.25})); cherry.position.set(-.05,3.15,.05); g.add(cherry);
     for(let i=0;i<24;i++){ const sp=new T.Mesh(new T.BoxGeometry(.05,.14,.05), fmat({color:[0xff4d6d,0x4da3ff,0xffe066,0x7cff8a][i%4]})); const a=rand(0,6.28), r=rand(.2,.44); sp.position.set(Math.cos(a)*r*.9, 1.45+rand(-.3,.3), Math.sin(a)*r*.9); sp.rotation.set(rand(0,3),rand(0,3),0); g.add(sp); }
     g.scale.setScalar(.8); return g; }},
+  pizza:{name:'Pizza', energy:28, color:'#ffb347', build:()=>{ const g=new T.Group();
+    const box=new T.Mesh(new T.BoxGeometry(1.5,.12,1.5), fmat({color:0xe9d7b6, roughness:.95})); box.position.y=.06; g.add(box);
+    const lid=new T.Mesh(new T.BoxGeometry(1.5,.08,1.5), fmat({color:0xe9d7b6, roughness:.95})); lid.position.set(0,.8,-.75); lid.rotation.x=-1.25; g.add(lid);
+    const logo=new T.Mesh(new T.CircleGeometry(.4,20), fmat({color:0xd42a2a})); logo.position.set(0,.82,-.72); logo.rotation.x=-1.25+Math.PI/2; g.add(logo);
+    const crust=new T.Mesh(new T.CylinderGeometry(.68,.68,.1,24), fmat({color:0xd9a05b, roughness:.9})); crust.position.y=.17; g.add(crust);
+    const sauce=new T.Mesh(new T.CylinderGeometry(.6,.6,.04,24), fmat({color:0xc83a1e, roughness:.7})); sauce.position.y=.24; g.add(sauce);
+    const cheese=new T.Mesh(new T.CylinderGeometry(.57,.57,.04,24), fmat({color:0xffd978, roughness:.6})); cheese.position.y=.27; g.add(cheese);
+    for(let i=0;i<9;i++){ const pep=new T.Mesh(new T.CylinderGeometry(.11,.11,.03,12), fmat({color:0x9c1c1c, roughness:.6})); const a=i/9*6.28+.3, r=i%2?.22:.42; pep.position.set(Math.cos(a)*r,.3,Math.sin(a)*r); g.add(pep); }
+    for(let i=0;i<6;i++){ const bas=new T.Mesh(new T.SphereGeometry(.06,6,5), fmat({color:0x2f8f3a})); bas.scale.set(1.6,.5,1); bas.position.set(rand(-.4,.4),.31,rand(-.4,.4)); bas.rotation.y=rand(0,3); g.add(bas); }
+    for(let i=0;i<8;i++){ const cut=new T.Mesh(new T.BoxGeometry(1.2,.05,.015), fmat({color:0xc83a1e})); cut.position.y=.3; cut.rotation.y=i/8*Math.PI; g.add(cut); }
+    return g; }},
   toast:{name:'Toast', energy:18, color:'#f0c08a', build:()=>{ const g=new T.Group(); const plate=new T.Mesh(new T.CylinderGeometry(1,.85,.08,28), fmat({color:0xf2f2f6, roughness:.25})); plate.position.y=.04; g.add(plate);
     for(let i=0;i<2;i++){ const sl=new T.Group(); const body=new T.Mesh(new T.BoxGeometry(1.0,1.0,.16), fmat({map:FOODTEX.toast, roughness:.9})); sl.add(body); const top=new T.Mesh(new T.CylinderGeometry(.5,.5,.16,20,1,false,0,Math.PI), fmat({map:FOODTEX.toast, roughness:.9})); top.rotation.x=Math.PI/2; top.rotation.z=0; top.position.y=.5; top.scale.set(1.0,1,.7); sl.add(top);
       const butter=new T.Mesh(new T.BoxGeometry(.3,.22,.06), fmat({color:0xffe27a, roughness:.3})); butter.position.set(0,.15,.11); sl.add(butter);
@@ -122,9 +134,11 @@ const tomatoPool = []; for(let i=0;i<12;i++){ const m=new T.Mesh(new T.SphereGeo
 // ---------- game state ----------
 let G = null; // match state
 let keys = {}, lastFrame = 0, paused=false;
-let me = {name:'', color:BIKE_COLORS[0], hat:'none', bike:'scout', accent:TRIMS[0], pattern:'solid'};
+let me = {name:'', color:BIKE_COLORS[0], hat:'none', bike:'scout', accent:TRIMS[0], pattern:'solid', level:'canyon'};
 try{ const s=JSON.parse(localStorage.getItem('speederRider')||'null'); if(s) me=Object.assign(me,s); }catch(e){}
 
+let builtLevel = null;
+function applyLevel(id){ setLevel(id); if(builtLevel!==level.id){ builtLevel=level.id; buildTerrain(); buildScenery(); } }
 const mySpec = ()=>({ name:me.name, color:me.color, hat:me.hat, bike:me.bike, accent:me.accent, pattern:me.pattern });
 function newMatch(seed, isHost){
   return { seed, isHost, len:matchLen, countdown:3.6, t:0, items:[], ents:{}, order:[], toms:[], msgs:[], over:false, standings:[], localId:null, spectate:null, sendAcc:0, running:true, elim:[] };
@@ -143,7 +157,7 @@ function freeSpot(){
   return [rand(-HALF+20,HALF-20), rand(-HALF+20,HALF-20)];
 }
 function hostSpawnItem(kind, type){
-  const [x,z]=freeSpot(); if(kind==='food') type = type || FOOD_KEYS[Math.floor(Math.random()*FOOD_KEYS.length)];
+  const [x,z]=freeSpot(); if(kind==='food') type = type || level.foods[Math.floor(Math.random()*level.foods.length)];
   const it={id:G.items.length, kind, type, x, z, alive:true, respawn:0, phase:Math.random()*6}; it.mesh=itemMesh(it); G.items.push(it); return it;
 }
 function killItem(it, delay){ it.alive=false; it.mesh.visible=false; it.respawn=delay; }
@@ -165,10 +179,10 @@ const humansAlive = ()=> aliveRiders().filter(e=>!e.bot);
 // ---------- physics for a human-controlled rider ----------
 function movePhysics(e, inp, dt){
   const st = statOf(e); const boosting = e.boost>0, maxS = boosting ? st.speed*2 : st.speed;
-  if(e.y>0.001){ /* airborne: hold speed */ } else if(inp.fwd) e.speed += (boosting?st.accel*1.8:st.accel)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
+  if(e.y>0.001){ /* airborne: hold speed */ } else if(inp.fwd) e.speed += (boosting?st.accel*1.8:st.accel)*dt; else if(inp.back) e.speed -= 40*level.grip*dt; else e.speed *= Math.max(0, 1-1.6*dt);
   e.speed = T.MathUtils.clamp(e.speed, -10, e.y>0.001 ? Math.max(maxS, e.speed) : maxS);
   const turnIn = inp.turn !== undefined ? inp.turn : (inp.left?1:0)-(inp.right?1:0);
-  e.heading += turnIn*st.turn*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
+  e.heading += turnIn*st.turn*level.grip*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
   e.lean += (turnIn*0.38*Math.min(1,Math.abs(e.speed)/10) - e.lean)*Math.min(1,8*dt);
   const grounded = e.y<=0.001 && e.vy<=0;
   if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? st.jump+5 : st.jump; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0; e.flipStart=0;
@@ -335,7 +349,7 @@ function hostRoom(){
     net.pingTimer = setInterval(()=>{ // drop riders who went quiet
       const now=performance.now(); for(const id in net.seen){ if(now-net.seen[id]>9000){ delete net.seen[id]; net.lobby=net.lobby.filter(p=>p.id!==id);
         if(G && G.ents[id] && G.ents[id].alive){ G.ents[id].alive=false; msg(G.ents[id].name+' lost connection','bad','all'); } else renderLobby(); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } }
-      if(!G) net.broadcast({t:'lobby', players:net.lobby, code:net.code});
+      if(!G) net.broadcast({t:'lobby', players:net.lobby, code:net.code, level:me.level});
     }, 2000);
   });
 }
@@ -368,15 +382,15 @@ function hostOnMsg(d){
 function clientOnMsg(d){
   if(d.t==='welcome'){ net.welcomed=true; $('startErr').textContent=''; showRoom(d.code||net.code); }
   else if(d.t==='full'){ if(!net.welcomed) peerFail({type:'room is full or already racing'}); }
-  else if(d.t==='lobby'){ if(!net.welcomed) return; net.lobby=d.players; if(!G) showRoom(d.code||net.code); renderLobby(); }
-  else if(d.t==='start'){ if(net.welcomed){ net.lastSnap=performance.now(); startMatch(d.seed, false, d.players, d.items, d.len); } }
+  else if(d.t==='lobby'){ if(!net.welcomed) return; net.lobby=d.players; if(d.level && LEVELS[d.level]){ me.level=d.level; } if(!G) showRoom(d.code||net.code); renderLobby(); }
+  else if(d.t==='start'){ if(net.welcomed){ net.lastSnap=performance.now(); startMatch(d.seed, false, d.players, d.items, d.len, d.level); } }
   else if(d.t==='snap'){ if(G){ net.lastSnap=performance.now(); applySnapshot(d, G.localId); } }
   else if(d.t==='over'){ if(G){ G.over=true; G.standings=d.standings; showOver(); } }
 }
 
 // ---------- lobby UI ----------
 function showRoom(code){ $('start').style.display='none'; $('room').style.display='flex'; $('roomCode').textContent=code; net.code=code; $('roomLink').textContent = net.host ? 'Invite link: '+roomLinkFor(code) : ''; $('copyLink').style.display = net.host?'inline-block':'none';
-  $('startBtn').style.display = net.host?'inline-block':'none'; $('roomNote').textContent = net.host?'':'Waiting for the host to start...'; renderLobby(); }
+  $('startBtn').style.display = net.host?'inline-block':'none'; $('roomNote').textContent = (net.host?'':'Waiting for the host to start... ')+'Place: '+(LEVELS[me.level]||LEVELS.canyon).name; renderLobby(); }
 function renderLobby(){ const box=$('plist'); box.innerHTML='';
   const list=[...net.lobby]; while(list.length<MAX_PLAYERS) list.push({bot:true, name:'Bot seat', color:'#555'});
   for(const p of list){ const d=document.createElement('div'); d.className='pl'; d.innerHTML='<i style="background:'+p.color+'"></i>'+(p.bot?'<small>Bot seat</small>':'<span></span>'); if(!p.bot){ d.querySelector('span').textContent=p.name+(p.id==='p0'?' (host)':'')+' · '+(BIKES[p.bike]||BIKES.scout).name; } box.appendChild(d); }
@@ -386,15 +400,15 @@ function leaveRoom(){ clearInterval(net.pingTimer); clearInterval(net.joinTimer)
 
 // ---------- match start / end ----------
 function clearWorld(){ while(world.children.length) world.remove(world.children[0]); }
-function startMatch(seed, isHost, players, itemList, len){
-  if(len) matchLen=len;
+function startMatch(seed, isHost, players, itemList, len, levelId){
+  if(len) matchLen=len; applyLevel(levelId || me.level || 'canyon');
   clearWorld(); setSeed(seed); buildObstacles(); G=newMatch(seed,isHost); paused=false; $('msgs').innerHTML='';
   $('room').style.display='none'; $('start').style.display='none'; $('over').style.display='none';
   const spots=[]; for(let i=0;i<MAX_PLAYERS;i++){ const a=i/MAX_PLAYERS*Math.PI*2; spots.push([Math.cos(a)*18, Math.sin(a)*18, a+Math.PI]); }
   players.forEach((p,i)=>{ const s=spots[i]; makeEnt({id:p.id, name:p.name, color:p.color, hat:p.hat, bike:p.bike||'scout', accent:p.accent||TRIMS[0], pattern:p.pattern||'solid', bot:!!p.bot, x:s[0], z:s[1], heading:Math.atan2(-s[0],-s[1])+Math.PI}); });
   G.localId = isHost ? 'p0' : net.myId;
-  if(isHost){ for(let i=0;i<18;i++) hostSpawnItem('food', FOOD_KEYS[i%FOOD_KEYS.length]); hostSpawnItem('drink'); hostSpawnItem('drink'); hostSpawnItem('cherry'); for(let i=0;i<4;i++) hostSpawnItem('tomato');
-    if(net.online) net.broadcast({t:'start', seed, players, len:matchLen, items:G.items.map(it=>({kind:it.kind,type:it.type,x:it.x,z:it.z}))}); }
+  if(isHost){ for(let i=0;i<18;i++) hostSpawnItem('food', level.foods[i%level.foods.length]); hostSpawnItem('drink'); hostSpawnItem('drink'); hostSpawnItem('cherry'); for(let i=0;i<4;i++) hostSpawnItem('tomato');
+    if(net.online) net.broadcast({t:'start', seed, players, len:matchLen, level:level.id, items:G.items.map(it=>({kind:it.kind,type:it.type,x:it.x,z:it.z}))}); }
   else { itemList.forEach((it,i)=>{ const o={id:i, kind:it.kind, type:it.type, x:it.x, z:it.z, alive:true, phase:Math.random()*6}; o.mesh=itemMesh(o); G.items.push(o); }); }
   lastFrame=performance.now(); document.body.classList.add('playing'); unlockAudio(); SFX.engineState(0,false,false); $('countdown').innerHTML='';
 }
@@ -469,9 +483,9 @@ function updateHUD(e){
   $('time').textContent=Math.floor(G.t)+'s'; const lf=Math.max(0,G.len-G.t); $('left').textContent=Math.floor(lf/60)+':'+String(Math.floor(lf%60)).padStart(2,'0'); $('left').style.color=lf<60?'var(--bad)':''; $('food').textContent=e.foodEaten; $('toms').textContent=e.tomatoes; $('alive').textContent=aliveRiders().length+'/'+MAX_PLAYERS;
   $('speed').firstChild.nodeValue = Math.round(Math.abs(e.speed)*3.6)+' ';
   const b=$('boost'); b.style.display=e.boost>0?'block':'none'; if(e.boost>0) b.textContent='⚡ TURBO '+e.boost.toFixed(1)+'s';
-  const clock=(0.36+G.t/DAY_LEN)%1; updateSky(clock);
+  const clock=(level.startClock+G.t/DAY_LEN)%1; updateSky(clock);
   const phase = clock<0.2?'🌙 Night':clock<0.3?'🌅 Sunrise':clock<0.45?'☀ Morning':clock<0.55?'☀ Noon':clock<0.7?'☀ Afternoon':clock<0.8?'🌇 Sunset':'🌙 Night';
-  $('clock').textContent = phase+' · day '+(Math.floor(G.t/DAY_LEN+0.36)+1);
+  $('clock').textContent = phase+' · day '+(Math.floor(G.t/DAY_LEN+level.startClock)+1);
   if(isTouch){ const tb=$('tomBtn'); tb.disabled = !(e.id===G.localId && e.alive && e.tomatoes>0); const h=$('thint'); h.style.opacity = G.t<8 ? 1 : 0; }
   const lowE = e.id===G.localId && e.alive && e.energy<22; $('lowE').classList.toggle('show', lowE); if(lowE && !G.lowWarned){ G.lowWarned=true; announce('LOW ENERGY!','bad','find food fast'); SFX.play('warn'); } if(e.energy>35) G.lowWarned=false;
   SFX.engineState(Math.min(1,Math.abs(e.speed)/28), e.boost>0, G.running && !paused);
@@ -488,7 +502,7 @@ function updateHUD(e){
 }
 const mapC = $('map').getContext('2d');
 function drawMap(me){
-  const S=300, k=S/WORLD; mapC.clearRect(0,0,S,S); mapC.fillStyle='rgba(120,90,55,.6)'; mapC.fillRect(0,0,S,S);
+  const S=300, k=S/WORLD; mapC.clearRect(0,0,S,S); mapC.fillStyle=level.mapBg; mapC.fillRect(0,0,S,S);
   mapC.fillStyle='rgba(255,255,255,.22)'; for(const o of obstacles){ mapC.beginPath(); mapC.arc((o.x+HALF)*k,(o.z+HALF)*k,Math.max(1.5,o.r*k),0,6.28); mapC.fill(); }
   for(const it of G.items){ if(!it.alive) continue; mapC.fillStyle = it.kind==='food'?FOODS[it.type].color : it.kind==='drink'?'#4df0e0': it.kind==='tomato'?'#ff4d2a':'#ff6ad5'; mapC.beginPath(); mapC.arc((it.x+HALF)*k,(it.z+HALF)*k,3.5,0,6.28); mapC.fill(); }
   for(const id of G.order){ const e=G.ents[id]; if(!e.alive||e===me) continue; mapC.fillStyle=e.clone?'#7cff8a':e.bot?'#ff4d6d':e.color; mapC.beginPath(); mapC.arc((e.x+HALF)*k,(e.z+HALF)*k,4,0,6.28); mapC.fill(); }
@@ -515,7 +529,7 @@ function frame(now){
     let view = G.ents[G.localId];
     if(!view || !view.alive){ if(!G.spectate || !G.ents[G.spectate] || !G.ents[G.spectate].alive){ const a=aliveRiders(); G.spectate = a.length? a[0].id : null; } view = G.spectate? G.ents[G.spectate] : view;
       $('spect').style.display = view && view.alive ? 'block':'none'; if(view) $('spectName').textContent=view.name; } else $('spect').style.display='none';
-    if(view){ updateCamera(dt, view); updateHUD(view); }
+    if(view){ updateCamera(dt, view); updateHUD(view); updateWeather(dt, view.x, view.z); }
   } else if(!G){ const a=now*0.00015; camera.position.set(Math.sin(a)*22, 9, Math.cos(a)*22); camera.lookAt(0,1,0); updateSky((0.42 + now/1000/DAY_LEN/4) % 1);
     if(preview){ preview.position.y=terrainH(0,0)+0.9+Math.sin(now*0.004)*0.08; preview.rotation.y=now*0.0006; } }
   renderFrame();
@@ -555,7 +569,8 @@ addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(k
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
   if(k==='p' && !net.online){ paused=!paused; $('pause').style.display=paused?'flex':'none'; if(!paused) lastFrame=performance.now(); }
-  if(k==='f'||k==='tab') pressKey(k); });
+  if(k==='f'||k==='tab') pressKey(k);
+  if(k==='escape'){ const me2=G.ents[G.localId]; if(!me2 || !me2.alive || G.over) $('exitBtn').click(); } });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
 $('resumeBtn').onclick=()=>{ paused=false; $('pause').style.display='none'; lastFrame=performance.now(); };
 
@@ -587,6 +602,8 @@ function unlockAudio(){ if(SFX.ensure()){ SFX.startMusic(); SFX.setMood(0); } }
 (function initMenu(){
   $('nameIn').value = me.name || '';
   const sw=$('swatches'); BIKE_COLORS.forEach(c=>{ const b=document.createElement('button'); b.className='sw'+(c===me.color?' on':''); b.style.background=c; b.setAttribute('aria-label','Bike color '+c); b.onclick=()=>{ me.color=c; [...sw.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; sw.appendChild(b); });
+  const lb=$('levels'); function renderLevels(){ lb.innerHTML=''; for(const k of LEVEL_KEYS){ const L=LEVELS[k]; const d=document.createElement('button'); d.className='veh lvl'+(k===me.level?' on':''); d.innerHTML='<b></b><small></small>'; d.querySelector('b').textContent=L.icon+' '+L.name; d.querySelector('small').textContent=L.blurb; d.onclick=()=>{ me.level=k; renderLevels(); applyLevel(k); refreshPreview(); SFX.play('click'); }; lb.appendChild(d); } }
+  renderLevels();
   const vb=$('vehicles'); const statBar=(v,max)=>'<i style="width:'+Math.round(v/max*100)+'%"></i>';
   function renderVehicles(){ vb.innerHTML=''; for(const k of BIKE_KEYS){ const b=BIKES[k]; const d=document.createElement('button'); d.className='veh'+(k===me.bike?' on':''); d.innerHTML='<b></b><small></small><div class="st"><span>Speed'+statBar(b.speed,34)+'</span><span>Accel'+statBar(b.accel,44)+'</span><span>Turn'+statBar(b.turn,2.8)+'</span><span>Jump'+statBar(b.jump,18)+'</span></div>'; d.querySelector('b').textContent=b.name; d.querySelector('small').textContent=b.blurb; d.onclick=()=>{ me.bike=k; renderVehicles(); refreshPreview(); }; vb.appendChild(d); } }
   renderVehicles();
@@ -603,10 +620,16 @@ function unlockAudio(){ if(SFX.ensure()){ SFX.startMusic(); SFX.setMood(0); } }
   $('againBtn').onclick=()=>{ if(net.online && !net.host){ toLobby(); $('roomNote').textContent='Waiting for the host to start the rematch...'; return; }
     $('over').style.display='none'; clearWorld(); goFull(); startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
   $('lobbyBtn').onclick=toLobby;
+  function leaveRace(){ if(!G) return; SFX.engineState(0,false,false); SFX.setMood(0); $('lowE').classList.remove('show'); $('splat').style.display='none'; $('countdown').classList.remove('show'); $('spect').style.display='none'; document.body.classList.remove('playing');
+    if(net.online && net.host && !G.over){ G.over=true; G.standings=aliveRiders().sort((a,b)=>b.energy-a.energy).map(e=>({id:e.id, name:e.name, bot:!!e.bot, t:Math.floor(G.t)})); net.broadcast({t:'over', standings:G.standings}); }
+    G.running=false; toLobby(); }
+  $('exitBtn').onclick=leaveRace; $('exitBtn2').onclick=leaveRace;
+  $('exitBtn').addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); leaveRace(); }, {passive:false}); $('exitBtn2').addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); leaveRace(); }, {passive:false});
 })();
 camera.position.set(0,6,-12); camera.lookAt(0,1,0);
 requestAnimationFrame(frame);
 window.__sf = { FOODS, world, camera, terrainH, buildDrink, buildCherry, buildTomato, get G(){ return G; } };
+window.__applyLevel = ()=>{ applyLevel(me.level||'canyon'); refreshPreview(); };
 
 }
 
@@ -616,7 +639,8 @@ import { loadAll } from './assets.js';
   const bar=$('loadBar'), txt=$('loadTxt');
   try{ await loadAll(p=>{ bar.style.width=Math.round(p*100)+'%'; txt.textContent='Loading canyon assets… '+Math.round(p*100)+'%'; }); }
   catch(err){ console.error(err); txt.textContent='Some assets failed to load; starting anyway.'; }
-  setupEnvironment(); buildTerrain(); buildScenery();
+  setupEnvironment();
   $('loading').style.display='none';
   startGame();
+  window.__applyLevel && window.__applyLevel();
 })();
