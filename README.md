@@ -5,7 +5,8 @@ A 3D hover-bike survival race through the Veyra canyon, created by a 7-year-old 
 ## Play
 - Solo against 9 bots, or create a room and share the 4-letter code / invite link.
 - Classic 5-minute races or 90-second quick play. Last rider with energy wins.
-- Food restores energy; energy drinks give turbo; cherries spawn a helper clone; tomatoes jam a rival's GPS; jumps (and double-tap backflips) launch you forward but cost energy.
+- Four vehicle classes (Scout, Blitz, Hauler, Hopper) with paint, trim and pattern customization.
+- Food (rice and beans, vegetables, strawberries, raspberries, milk, bagels, toast, french fries, ice cream) restores energy; energy drinks give turbo; cherries spawn a helper clone; tomatoes jam a rival's GPS; jumps (and double-tap backflips) launch you forward but cost energy.
 
 Controls: W/S drive, A/D steer, Space jump (double-tap = backflip), F throw tomato, Tab spectate, P pause. Phone: drag left thumb to steer, tap right side to jump, hold to brake.
 

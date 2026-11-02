@@ -8,6 +8,7 @@ import { updateSky, sunDir, setupEnvironment } from './sky.js';
 import { terrainH, trailDist, buildTerrain, shadowify } from './terrain.js';
 import { obstacles, buildScenery, buildObstacles, buildEnvironment } from './props.js';
 import { SFX } from './audio.js';
+import { BIKES, BIKE_KEYS, TRIMS, PATTERNS, statOf, makeBike, labelSprite } from './vehicles.js';
 
 const mqttLib = () => window.mqtt;
 let matchLen = 300; // chosen on the start screen; 90 for quick play
@@ -15,75 +16,8 @@ function applyQuality(name){ settings.qualityName = name; try{ localStorage.setI
 
 export function startGame(){
 // ---------- helpers ----------
-function labelSprite(text, color, w){
-  const c = document.createElement('canvas'); c.width=256; c.height=64;
-  const ctx = c.getContext('2d'); ctx.font = '700 30px Exo 2, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle='rgba(18,10,31,.6)'; ctx.beginPath(); ctx.roundRect(8,10,240,44,22); ctx.fill();
-  ctx.fillStyle=color; ctx.fillText(text,128,33);
-  const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace;
-  const s = new T.Sprite(new T.SpriteMaterial({map:tex, transparent:true, depthTest:false})); s.scale.set(w||5,(w||5)/4,1); return s;
-}
 const mat = (color, extra={}) => new T.MeshStandardMaterial(Object.assign({color, roughness:.55, metalness:.1}, extra));
-const metal = (color, extra={}) => new T.MeshStandardMaterial(Object.assign({color, roughness:.28, metalness:.85}, extra));
 const glowMat = (color, extra={}) => new T.MeshStandardMaterial(Object.assign({color, emissive:color, emissiveIntensity:0.9, roughness:.3, metalness:0}, extra));
-
-// ---------- bikes and hats ----------
-function addHat(g, hat){
-  const y=1.87; g=(function(){ const hg=new T.Group(); hg.position.set(0,0,.6); g.add(hg); return hg; })();
-  if(hat==='cap'){ const c=new T.Mesh(new T.SphereGeometry(.34,12,8,0,6.3,0,1.5), mat(0xff4d6d)); c.position.set(0,y-.2,-.05); g.add(c); const b=new T.Mesh(new T.BoxGeometry(.5,.05,.35), mat(0xff4d6d)); b.position.set(0,y-.12,.3); g.add(b); }
-  else if(hat==='cone'){ const c=new T.Mesh(new T.ConeGeometry(.3,.9,12), mat(0xffb347)); c.position.set(0,y+.3,-.05); g.add(c); const s=new T.Mesh(new T.TorusGeometry(.2,.05,6,12), mat(0x4df0e0)); s.position.set(0,y+.3,-.05); s.rotation.x=Math.PI/2; g.add(s); const ball=new T.Mesh(new T.SphereGeometry(.09,8,8), mat(0xff6ad5)); ball.position.set(0,y+.78,-.05); g.add(ball); }
-  else if(hat==='crown'){ const c=new T.Mesh(new T.CylinderGeometry(.34,.3,.3,8,1,true), new T.MeshPhongMaterial({color:0xffd24d, side:T.DoubleSide, shininess:120})); c.position.set(0,y,-.05); g.add(c); for(let i=0;i<6;i++){ const sp=new T.Mesh(new T.ConeGeometry(.08,.25,4), mat(0xffd24d)); const a=i/6*Math.PI*2; sp.position.set(Math.cos(a)*.32,y+.25,-.05+Math.sin(a)*.32); g.add(sp);} }
-  else if(hat==='horns'){ for(const s of [-1,1]){ const h=new T.Mesh(new T.ConeGeometry(.1,.6,8), mat(0xf0e6d2)); h.position.set(s*.32,y+.05,-.05); h.rotation.z=-s*.6; g.add(h);} const band=new T.Mesh(new T.TorusGeometry(.33,.05,6,16), mat(0x8a5a2a)); band.position.set(0,y-.05,-.05); band.rotation.x=Math.PI/2; g.add(band); }
-  else if(hat==='antenna'){ const st=new T.Mesh(new T.CylinderGeometry(.03,.03,.7,6), mat(0xcccccc)); st.position.set(0,y+.3,-.05); g.add(st); const b=new T.Mesh(new T.SphereGeometry(.12,10,10), new T.MeshBasicMaterial({color:0x4df0e0})); b.position.set(0,y+.68,-.05); g.add(b); }
-  else if(hat==='tophat'){ const b=new T.Mesh(new T.CylinderGeometry(.42,.42,.06,16), mat(0x1a1a24)); b.position.set(0,y-.1,-.05); g.add(b); const c=new T.Mesh(new T.CylinderGeometry(.28,.3,.6,16), mat(0x1a1a24)); c.position.set(0,y+.2,-.05); g.add(c); const r=new T.Mesh(new T.CylinderGeometry(.31,.31,.1,16), mat(0xff6ad5)); r.position.set(0,y,-.05); g.add(r); }
-}
-function makeBike(color, hat, name, clone){
-  const g = new T.Group(); const c = new T.Color(color);
-  const paint = new T.MeshPhysicalMaterial({color:c, roughness:.25, metalness:.6, clearcoat:1, clearcoatRoughness:.1});
-  const dark = metal(0x1c1c2a,{roughness:.4}); const chrome = metal(0xd8dce8,{roughness:.15});
-  const glowC = clone?0x7cff8a:0x4df0e0;
-  // hull: long tapered body
-  const hull = new T.Mesh(new T.CylinderGeometry(.5,.5,2.8,14), paint); hull.rotation.x=Math.PI/2; hull.position.set(0,.55,.2); hull.scale.set(1,.75,1); g.add(hull);
-  const tail = new T.Mesh(new T.SphereGeometry(.5,14,10), paint); tail.position.set(0,.55,-1.2); tail.scale.set(1,.75,1); g.add(tail);
-  const nose = new T.Mesh(new T.ConeGeometry(.42,1.6,12), paint); nose.rotation.x=Math.PI/2; nose.position.set(0,.5,2.6); nose.scale.set(1,.8,1); g.add(nose);
-  const noseTip = new T.Mesh(new T.SphereGeometry(.14,10,10), glowMat(glowC)); noseTip.position.set(0,.5,3.4); g.add(noseTip);
-  // canopy / fuel cell
-  const tank = new T.Mesh(new T.SphereGeometry(.48,14,10), paint); tank.scale.set(1,.7,1.3); tank.position.set(0,.85,.5); g.add(tank);
-  // side pods with glowing vents
-  for(const sx of [-1,1]){ const pod=new T.Mesh(new T.BoxGeometry(.5,.45,1.6), dark); pod.position.set(sx*.8,.5,-.2); g.add(pod);
-    const vent=new T.Mesh(new T.BoxGeometry(.08,.22,1.0), glowMat(glowC)); vent.position.set(sx*1.07,.5,-.2); g.add(vent);
-    const strut=new T.Mesh(new T.BoxGeometry(.5,.12,.5), chrome); strut.position.set(sx*.45,.55,-.2); g.add(strut); }
-  // front steering vanes (canards)
-  for(const sx of [-1,1]){ const v=new T.Mesh(new T.BoxGeometry(1.3,.08,.55), chrome); v.position.set(sx*.9,.5,1.7); v.rotation.z=sx*.18; g.add(v); }
-  // rear engine: twin turbines with spinning rotors
-  g.userData.rotors=[];
-  for(const sx of [-1,1]){ const eng=new T.Mesh(new T.CylinderGeometry(.38,.45,1.5,14), dark); eng.rotation.x=Math.PI/2; eng.position.set(sx*.62,.55,-1.6); g.add(eng);
-    const rim=new T.Mesh(new T.TorusGeometry(.4,.06,8,20), chrome); rim.position.set(sx*.62,.55,-2.36); g.add(rim);
-    const rotor=new T.Mesh(new T.CylinderGeometry(.34,.34,.05,16), glowMat(glowC)); rotor.rotation.x=Math.PI/2; rotor.position.set(sx*.62,.55,-2.34); g.add(rotor); g.userData.rotors.push(rotor);
-    const blades=new T.Group(); for(let i=0;i<5;i++){ const b=new T.Mesh(new T.BoxGeometry(.06,.6,.03), dark); b.rotation.z=i/5*Math.PI*2; blades.add(b); } blades.position.set(sx*.62,.55,-2.3); g.add(blades); g.userData.rotors.push(blades);
-    const exhaust=new T.Mesh(new T.ConeGeometry(.32,1.4,12,1,true), new T.MeshBasicMaterial({color:glowC, transparent:true, opacity:.55, side:T.DoubleSide, depthWrite:false})); exhaust.rotation.x=Math.PI/2; exhaust.position.set(sx*.62,.55,-3.1); g.add(exhaust); (g.userData.exhaust=g.userData.exhaust||[]).push(exhaust); }
-  const glow = new T.Mesh(new T.CircleGeometry(.01,4), new T.MeshBasicMaterial({color:glowC, transparent:true, opacity:0})); g.add(glow); // legacy handle
-  // tail fin
-  const fin=new T.Mesh(new T.BoxGeometry(.08,.9,1.1), paint); fin.position.set(0,1.05,-1.5); fin.rotation.x=-.5; g.add(fin);
-  const finLight=new T.Mesh(new T.BoxGeometry(.1,.1,.6), glowMat(0xff4d6d)); finLight.position.set(0,1.4,-1.7); finLight.rotation.x=-.5; g.add(finLight);
-  // seat, rider
-  const seat = new T.Mesh(new T.BoxGeometry(.7,.22,1.2), new T.MeshStandardMaterial({color:0x2a2233, roughness:.9})); seat.position.set(0,.9,-.5); g.add(seat);
-  const suitC = clone?0x2a7a3a:c.clone().offsetHSL(0.5,0,0);
-  const torso = new T.Mesh(new T.BoxGeometry(.6,.85,.42), mat(suitC,{roughness:.7})); torso.position.set(0,1.3,-.1); torso.rotation.x=1.05; g.add(torso);
-  const pack = new T.Mesh(new T.BoxGeometry(.42,.32,.3), mat(0x8a5a2a,{roughness:.9})); pack.position.set(0,1.55,-.35); pack.rotation.x=1.05; g.add(pack);
-  for(const sx of [-1,1]){ const arm=new T.Mesh(new T.CylinderGeometry(.09,.09,.9,8), mat(suitC,{roughness:.7})); arm.position.set(sx*.42,1.15,.55); arm.rotation.x=1.35; g.add(arm);
-    const glove=new T.Mesh(new T.SphereGeometry(.11,8,8), dark); glove.position.set(sx*.45,1.0,.98); g.add(glove);
-    const leg=new T.Mesh(new T.CylinderGeometry(.11,.1,.9,8), dark); leg.position.set(sx*.3,.75,.1); leg.rotation.x=1.3; leg.rotation.z=sx*.25; g.add(leg); }
-  const head = new T.Mesh(new T.SphereGeometry(.3,16,14), new T.MeshPhysicalMaterial({color:clone?0x9dffb0:0xf4f4ff, roughness:.2, metalness:.3, clearcoat:1})); head.position.set(0,1.62,.55); g.add(head);
-  const visor = new T.Mesh(new T.SphereGeometry(.28,14,10,0,6.3,0,1.3), glowMat(glowC)); visor.position.set(0,1.62,.55); visor.rotation.x=Math.PI/2.2; visor.scale.set(1,1,.95); g.add(visor);
-  const bars = new T.Mesh(new T.TorusGeometry(.5,.05,8,18,Math.PI), chrome); bars.position.set(0,1.0,1.0); bars.rotation.x=Math.PI/2; bars.rotation.z=Math.PI; g.add(bars);
-  const shadow = new T.Mesh(new T.CircleGeometry(1.4,16), new T.MeshBasicMaterial({color:0x000000, transparent:true, opacity:.3, depthWrite:false})); shadow.rotation.x=-Math.PI/2; shadow.name='shadow'; g.add(shadow);
-  // hover light under the bike
-  const under = new T.Mesh(new T.CircleGeometry(1.1,20), new T.MeshBasicMaterial({color:glowC, transparent:true, opacity:.12, depthWrite:false})); under.rotation.x=-Math.PI/2; under.position.y=.02; under.name='under'; g.add(under);
-  addHat(g, hat);
-  if(name){ const l=labelSprite(name, clone?'#7cff8a':'#ffffff', 4); l.position.y=3.3; l.name='label'; g.add(l); }
-  g.userData.glow = glow; shadowify(g, true, false); shadow.castShadow=false; under.castShadow=false; world.add(g); return g;
-}
 
 // ---------- items ----------
 // food textures drawn once on canvases
@@ -125,6 +59,22 @@ const FOODS = {
     const cap=new T.Mesh(new T.CylinderGeometry(.09,.09,.08,12), fmat({color:0x2f6fe0, roughness:.3})); cap.position.set(0,1.42,.25); cap.rotation.x=-.5; g.add(cap); return g; }},
   bagel:{name:'Bagels', energy:25, color:'#f5c77a', build:()=>{ const g=new T.Group(); const paper=new T.Mesh(new T.CircleGeometry(1,24), fmat({color:0xe8dcc0, roughness:1, side:T.DoubleSide})); paper.rotation.x=-Math.PI/2; paper.position.y=.02; g.add(paper);
     for(let i=0;i<3;i++){ const t=new T.Mesh(new T.TorusGeometry(.5,.24,14,28), fmat({map:FOODTEX.bagel, roughness:.75})); t.rotation.x=Math.PI/2+(i===2?.35:0); t.position.set(i===2?.2:0, .25+i*.4, i===2?-.1:0); t.rotation.z=i*.7; g.add(t); } return g; }},
+  fries:{name:'French fries', energy:24, color:'#ffd24d', build:()=>{ const g=new T.Group();
+    const box=new T.Mesh(new T.BoxGeometry(1.0,.9,.55), fmat({color:0xe8322a, roughness:.6})); box.position.y=.45; g.add(box);
+    const flare=new T.Mesh(new T.BoxGeometry(1.1,.3,.6), fmat({color:0xe8322a, roughness:.6})); flare.position.y=.95; g.add(flare);
+    const inner=new T.Mesh(new T.BoxGeometry(.9,.12,.45), fmat({color:0xfff2c2, roughness:.9})); inner.position.y=1.1; g.add(inner);
+    const stripe=new T.Mesh(new T.BoxGeometry(1.02,.18,.57), fmat({color:0xffd24d, roughness:.6})); stripe.position.y=.25; g.add(stripe);
+    for(let i=0;i<14;i++){ const h=rand(.9,1.4); const f=new T.Mesh(new T.BoxGeometry(.11,h,.11), fmat({color:i%3?0xf3c24a:0xe0a52c, roughness:.7})); f.position.set(rand(-.38,.38),1.0+h/2,rand(-.16,.16)); f.rotation.set(rand(-.25,.25),rand(0,1),rand(-.3,.3)); g.add(f); }
+    return g; }},
+  icecream:{name:'Ice cream', energy:26, color:'#ffc8e6', build:()=>{ const g=new T.Group();
+    const cone=new T.Mesh(new T.ConeGeometry(.42,1.3,16), fmat({color:0xd9a05b, roughness:.9})); cone.rotation.x=Math.PI; cone.position.y=.65; g.add(cone);
+    const lat=new T.Mesh(new T.ConeGeometry(.43,1.3,12,3,true), new T.MeshStandardMaterial({color:0x8a5a2a, roughness:1, wireframe:true})); lat.rotation.x=Math.PI; lat.position.y=.65; g.add(lat);
+    const s1=new T.Mesh(new T.SphereGeometry(.46,18,14), fmat({color:0xff9ec8, roughness:.75})); s1.position.y=1.45; g.add(s1);
+    const s2=new T.Mesh(new T.SphereGeometry(.42,18,14), fmat({color:0xfff6dc, roughness:.75})); s2.position.set(.08,2.1,-.05); g.add(s2);
+    const s3=new T.Mesh(new T.SphereGeometry(.38,18,14), fmat({color:0x6b3a1e, roughness:.75})); s3.position.set(-.05,2.7,.05); g.add(s3);
+    const cherry=new T.Mesh(new T.SphereGeometry(.13,12,10), new T.MeshStandardMaterial({color:0xb3003b, roughness:.25})); cherry.position.set(-.05,3.15,.05); g.add(cherry);
+    for(let i=0;i<24;i++){ const sp=new T.Mesh(new T.BoxGeometry(.05,.14,.05), fmat({color:[0xff4d6d,0x4da3ff,0xffe066,0x7cff8a][i%4]})); const a=rand(0,6.28), r=rand(.2,.44); sp.position.set(Math.cos(a)*r*.9, 1.45+rand(-.3,.3), Math.sin(a)*r*.9); sp.rotation.set(rand(0,3),rand(0,3),0); g.add(sp); }
+    g.scale.setScalar(.8); return g; }},
   toast:{name:'Toast', energy:18, color:'#f0c08a', build:()=>{ const g=new T.Group(); const plate=new T.Mesh(new T.CylinderGeometry(1,.85,.08,28), fmat({color:0xf2f2f6, roughness:.25})); plate.position.y=.04; g.add(plate);
     for(let i=0;i<2;i++){ const sl=new T.Group(); const body=new T.Mesh(new T.BoxGeometry(1.0,1.0,.16), fmat({map:FOODTEX.toast, roughness:.9})); sl.add(body); const top=new T.Mesh(new T.CylinderGeometry(.5,.5,.16,20,1,false,0,Math.PI), fmat({map:FOODTEX.toast, roughness:.9})); top.rotation.x=Math.PI/2; top.rotation.z=0; top.position.y=.5; top.scale.set(1.0,1,.7); sl.add(top);
       const butter=new T.Mesh(new T.BoxGeometry(.3,.22,.06), fmat({color:0xffe27a, roughness:.3})); butter.position.set(0,.15,.11); sl.add(butter);
@@ -172,16 +122,17 @@ const tomatoPool = []; for(let i=0;i<12;i++){ const m=new T.Mesh(new T.SphereGeo
 // ---------- game state ----------
 let G = null; // match state
 let keys = {}, lastFrame = 0, paused=false;
-let me = {name:'', color:BIKE_COLORS[0], hat:'none'};
+let me = {name:'', color:BIKE_COLORS[0], hat:'none', bike:'scout', accent:TRIMS[0], pattern:'solid'};
 try{ const s=JSON.parse(localStorage.getItem('speederRider')||'null'); if(s) me=Object.assign(me,s); }catch(e){}
 
+const mySpec = ()=>({ name:me.name, color:me.color, hat:me.hat, bike:me.bike, accent:me.accent, pattern:me.pattern });
 function newMatch(seed, isHost){
   return { seed, isHost, len:matchLen, countdown:3.6, t:0, items:[], ents:{}, order:[], toms:[], msgs:[], over:false, standings:[], localId:null, spectate:null, sendAcc:0, running:true, elim:[] };
 }
 function makeEnt(spec){
   const e = Object.assign({ x:0,z:0,y:0,vy:0,heading:0,speed:0,lean:0,energy:100,alive:true,blind:0,boost:0,tomatoes:0,foodEaten:0,survived:0,hitCd:0,crashes:0,
     tx:0,tz:0,ty:0,th:0, input:{}, botTarget:null, wander:0, throwCd:3 }, spec);
-  e.mesh = makeBike(e.color, e.hat, e.name, e.clone);
+  e.mesh = makeBike(e);
   G.ents[e.id]=e; G.order.push(e.id); return e;
 }
 function removeEnt(e){ world.remove(e.mesh); delete G.ents[e.id]; G.order = G.order.filter(i=>i!==e.id); }
@@ -213,19 +164,19 @@ const humansAlive = ()=> aliveRiders().filter(e=>!e.bot);
 
 // ---------- physics for a human-controlled rider ----------
 function movePhysics(e, inp, dt){
-  const boosting = e.boost>0, maxS = boosting ? 56 : 28;
-  if(e.y>0.001){ /* airborne: hold speed */ } else if(inp.fwd) e.speed += (boosting?60:34)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
+  const st = statOf(e); const boosting = e.boost>0, maxS = boosting ? st.speed*2 : st.speed;
+  if(e.y>0.001){ /* airborne: hold speed */ } else if(inp.fwd) e.speed += (boosting?st.accel*1.8:st.accel)*dt; else if(inp.back) e.speed -= 40*dt; else e.speed *= Math.max(0, 1-1.6*dt);
   e.speed = T.MathUtils.clamp(e.speed, -10, e.y>0.001 ? Math.max(maxS, e.speed) : maxS);
   const turnIn = inp.turn !== undefined ? inp.turn : (inp.left?1:0)-(inp.right?1:0);
-  e.heading += turnIn*2.3*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
+  e.heading += turnIn*st.turn*dt*Math.min(1, 0.35+Math.abs(e.speed)/14)*(e.speed>=0?1:-1);
   e.lean += (turnIn*0.38*Math.min(1,Math.abs(e.speed)/10) - e.lean)*Math.min(1,8*dt);
   const grounded = e.y<=0.001 && e.vy<=0;
-  if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? 19 : 14; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0; e.flipStart=0;
-    if(e.speed>4) e.speed = Math.min(e.boost>0?60:34, e.speed + (flip?7:4));                 // a jump launches you forward
+  if(inp.jump && grounded){ const flip = !!inp.flip; e.vy = flip ? st.jump+5 : st.jump; e.jumpedOver={}; e.flipping=flip; e.flipA=0; e.airT=0; e.flipStart=0;
+    if(e.speed>4) e.speed = Math.min(e.boost>0?st.speed*2+4:st.speed+6, e.speed + (flip?7:4));                 // a jump launches you forward
     e.jumpCost = (e.jumpCost||0) + (flip?5:2);                                                // and burns energy
     if(e.id===G.localId){ SFX.play(flip?'flip':'jump'); if(flip) announce('BACKFLIP!','boost','-5 energy'); else showMsg('Jump -2 energy','boost'); } }
   else if(inp.jump && !grounded && !e.flipping && (e.airT||0)<0.45 && e.vy>0){ // second tap right after takeoff: upgrade into a backflip
-    e.vy = Math.max(e.vy, 19 - 24*(e.airT||0)); e.flipping=true; e.flipA=0; e.flipStart=e.airT||0; e.speed=Math.min(e.boost>0?60:34, e.speed+3); e.jumpCost=(e.jumpCost||0)+3;
+    e.vy = Math.max(e.vy, st.jump+5 - 24*(e.airT||0)); e.flipping=true; e.flipA=0; e.flipStart=e.airT||0; e.speed=Math.min(e.boost>0?st.speed*2+4:st.speed+6, e.speed+3); e.jumpCost=(e.jumpCost||0)+3;
     if(e.id===G.localId){ SFX.play('flip'); announce('BACKFLIP!','boost','-5 energy'); } }
   if(!grounded){ e.airT=(e.airT||0)+dt; }
   if(e.flipping){ const st=e.flipStart||0; const total = Math.max(0.6, 2*19/24 - st); e.flipA = Math.min(1, ((e.airT||0)-st)/total); if(grounded && e.airT>0.2){ e.flipping=false; e.flipA=0; e.flipStart=0; } }
@@ -255,7 +206,7 @@ function botUpdate(e, dt){
   let diff = Math.atan2(Math.sin(desired-e.heading), Math.cos(desired-e.heading));
   const avoid = steerAvoid(e); if(Math.abs(avoid)>0.01) diff = avoid*2.2;
   const turn = T.MathUtils.clamp(diff, -2.6*dt, 2.6*dt); e.heading += turn;
-  const maxS = (e.clone ? 23 : 19 + Math.min(7, G.t*0.05)) * (e.boost>0?1.8:1);
+  const maxS = (e.clone ? 23 : (statOf(e).speed-9) + Math.min(7, G.t*0.05)) * (e.boost>0?1.8:1);
   e.speed += (maxS - e.speed)*Math.min(1, 1.5*dt); if(Math.abs(diff)>1.2) e.speed *= 0.97;
   e.x += Math.sin(e.heading)*e.speed*dt; e.z += Math.cos(e.heading)*e.speed*dt;
   e.x = T.MathUtils.clamp(e.x,-HALF+8,HALF-8); e.z = T.MathUtils.clamp(e.z,-HALF+8,HALF-8);
@@ -283,7 +234,7 @@ function hostPickup(e, it){
   else if(it.kind==='drink'){ e.boost=8; msg('Energy drink! Double speed for 8s','boost',e.id); killItem(it, 30); }
   else if(it.kind==='tomato'){ if(e.tomatoes>=3) return; e.tomatoes++; msg('Tomato picked up. Throw it with F or the tomato button','good',e.id); killItem(it, 20); }
   else { const clones=Object.values(G.ents).filter(c=>c.clone&&c.owner===e.id).length;
-    if(clones<2 && !e.bot){ makeEnt({id:'c'+Math.floor(Math.random()*1e6), name:e.name+"'s clone", color:'#7cff8a', hat:e.hat, bot:true, clone:true, owner:e.id, x:e.x-Math.sin(e.heading)*4, z:e.z-Math.cos(e.heading)*4, heading:e.heading}); msg('Cherries! A clone joins you and gathers food','good',e.id); }
+    if(clones<2 && !e.bot){ makeEnt({id:'c'+Math.floor(Math.random()*1e6), name:e.name+"'s clone", color:'#7cff8a', hat:e.hat, bike:e.bike, accent:'#7cff8a', pattern:e.pattern, bot:true, clone:true, owner:e.id, x:e.x-Math.sin(e.heading)*4, z:e.z-Math.cos(e.heading)*4, heading:e.heading}); msg('Cherries! A clone joins you and gathers food','good',e.id); }
     else { e.energy=Math.min(100,e.energy+15); msg('Cherries +15 energy','good',e.id); } killItem(it, 50); }
 }
 function hostSim(dt){
@@ -292,7 +243,7 @@ function hostSim(dt){
     if(e.bot) botUpdate(e, dt);
     else if(id===G.localId) movePhysics(e, keys2input(), dt);
     // crash damage reported by clients and local alike
-    if(e.crashes>0){ e.energy -= 8*e.crashes; e.crashes=0; }
+    if(e.crashes>0){ e.energy -= 8*e.crashes*statOf(e).armor; e.crashes=0; }
     if(e.closeCalls>0){ e.energy=Math.min(100,e.energy+3*e.closeCalls); e.closeCalls=0; }
     if(e.jumpCost>0){ e.energy -= e.jumpCost; e.jumpCost=0; }
     if(e.comboT>0){ e.comboT-=dt; if(e.comboT<=0) e.combo=0; }
@@ -301,7 +252,7 @@ function hostSim(dt){
     // pickups: bots, clones and the host's own rider are checked here; remote riders report their own pickups
     if(e.bot || e.id===G.localId) for(const it of G.items){ if(it.alive && e.y<2.5 && Math.hypot(it.x-e.x, it.z-e.z)<2.8) hostPickup(e, it); }
     if(e.clone) continue;
-    const lenK = 300/G.len; e.energy -= (2.0 + G.t*0.014*lenK)*lenK*(e.boost>0?1.4:1)*(G.t>G.len-Math.min(60,G.len*0.2) ? 2.2 : 1)*dt; e.survived = G.t;
+    const lenK = 300/G.len; e.energy -= (2.0 + G.t*0.014*lenK)*lenK*statOf(e).drain*(e.boost>0?1.4:1)*(G.t>G.len-Math.min(60,G.len*0.2) ? 2.2 : 1)*dt; e.survived = G.t;
     if(e.energy<=0){ e.energy=0; e.alive=false; G.elim.unshift(e.id); msg(e.name+' is out of energy!', 'bad', 'all');
       for(const c of Object.values(G.ents)) if(c.clone&&c.owner===e.id) c.alive=false; }
   }
@@ -331,13 +282,13 @@ function keys2input(){
 
 // ---------- snapshots ----------
 function snapshot(){
-  return { t:'snap', gt:G.t, ents:G.order.map(id=>{ const e=G.ents[id]; return {id, n:e.name, c:e.color, ht:e.hat, bot:e.bot?1:0, cl:e.clone?1:0, ow:e.owner, x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), e:Math.round(e.energy), a:e.alive?1:0, b:+e.blind.toFixed(1), bo:+e.boost.toFixed(1), tm:e.tomatoes, f:e.foodEaten, fa:+(e.flipping?e.flipA:(e.rflip||0)).toFixed(2)}; }),
+  return { t:'snap', gt:G.t, ents:G.order.map(id=>{ const e=G.ents[id]; return {id, n:e.name, c:e.color, ht:e.hat, bk:e.bike, ac:e.accent, pt:e.pattern, bot:e.bot?1:0, cl:e.clone?1:0, ow:e.owner, x:+e.x.toFixed(2), z:+e.z.toFixed(2), y:+e.y.toFixed(2), h:+e.heading.toFixed(3), s:+e.speed.toFixed(1), l:+e.lean.toFixed(2), e:Math.round(e.energy), a:e.alive?1:0, b:+e.blind.toFixed(1), bo:+e.boost.toFixed(1), tm:e.tomatoes, f:e.foodEaten, fa:+(e.flipping?e.flipA:(e.rflip||0)).toFixed(2)}; }),
     items:G.items.map(it=>[it.alive?1:0, +it.x.toFixed(1), +it.z.toFixed(1)]), toms:G.toms.map(tm=>[+tm.x.toFixed(1),+tm.y.toFixed(1),+tm.z.toFixed(1)]), msgs:G.msgs.splice(0) };
 }
 function applySnapshot(s, forId){
   G.t = s.gt; const seen = new Set();
   for(const d of s.ents){ seen.add(d.id); let e=G.ents[d.id];
-    if(!e) e = makeEnt({id:d.id, name:d.n, color:d.c, hat:d.ht, bot:!!d.bot, clone:!!d.cl, owner:d.ow, x:d.x, z:d.z, heading:d.h});
+    if(!e) e = makeEnt({id:d.id, name:d.n, color:d.c, hat:d.ht, bike:d.bk, accent:d.ac, pattern:d.pt, bot:!!d.bot, clone:!!d.cl, owner:d.ow, x:d.x, z:d.z, heading:d.h});
     Object.assign(e, {energy:d.e, alive:!!d.a, blind:d.b, boost:d.bo, tomatoes:d.tm, foodEaten:d.f});
     if(d.id!==forId){ e.tx=d.x; e.tz=d.z; e.ty=d.y; e.th=d.h; e.speed=d.s; e.lean=d.l; e.rflip=d.fa||0; }
     if(!e.alive) e.mesh.visible=false;
@@ -376,7 +327,7 @@ net.sendHost = m => publish('h', Object.assign({from:net.myId}, m));
 function hostRoom(){
   const code=randomCode(); $('hostBtn').disabled=$('joinBtn').disabled=true;
   if(!mqttLib()){ peerFail({type:'relay library blocked on this page'}); return; }
-  net.code=code; net.host=true; net.online=true; net.myId='p0'; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}];
+  net.code=code; net.host=true; net.online=true; net.myId='p0'; net.lobby=[Object.assign({id:'p0'}, mySpec())];
   connectBroker(c=>{
     c.subscribe(topic(code,'h'), {qos:0});
     c.on('message', (tp, payload)=>{ let d; try{ d=JSON.parse(payload.toString()); }catch(e){ return; } if(d && d.from) hostOnMsg(d); });
@@ -397,8 +348,8 @@ function joinRoom(code){
     c.on('message', (tp, payload)=>{ let d; try{ d=JSON.parse(payload.toString()); }catch(e){ return; } clientOnMsg(d); });
     $('startErr').textContent='Relay connected. Looking for room '+code+'...';
     let tries=0; net.joinTimer=setInterval(()=>{ if(net.welcomed){ clearInterval(net.joinTimer); return; } if(++tries>8){ clearInterval(net.joinTimer); peerFail({type:'no open room with code '+code+'. Check the code and make sure the host is still on the lobby screen'}); return; }
-      net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat}); }, 1000);
-    net.sendHost({t:'join', name:me.name, color:me.color, hat:me.hat});
+      net.sendHost(Object.assign({t:'join'}, mySpec())); }, 1000);
+    net.sendHost(Object.assign({t:'join'}, mySpec()));
     net.hbTimer=setInterval(()=>{ if(net.welcomed && net.online){ net.sendHost({t:'hb'});
       if(G && !G.over && performance.now()-net.lastSnap>4000){ showMsg('Reconnecting to the host...','bad'); net.lastSnap=performance.now();
         try{ c.subscribe([topic(code,'all'), topic(code,'c/'+net.myId)], {qos:0}); if(!c.connected) c.reconnect(); }catch(e){} } } }, 2000);
@@ -408,7 +359,7 @@ function hostOnMsg(d){
   const id=d.from; net.seen[id]=performance.now();
   if(d.t==='join'){ if(net.lobby.some(p=>p.id===id)){ net.sendTo(id,{t:'welcome', id, code:net.code}); return; }
     if(net.lobby.length>=MAX_PLAYERS || G){ net.sendTo(id,{t:'full'}); return; }
-    net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat}); net.sendTo(id,{t:'welcome', id, code:net.code}); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); renderLobby(); return; }
+    net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat, bike:BIKES[d.bike]?d.bike:'scout', accent:d.accent||TRIMS[0], pattern:PATTERNS[d.pattern]?d.pattern:'solid'}); net.sendTo(id,{t:'welcome', id, code:net.code}); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); renderLobby(); return; }
   if(!G) return; const e=G.ents[id]; if(!e) return;
   if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; e.closeCalls=(e.closeCalls||0)+(d.cc||0); e.jumpCost=(e.jumpCost||0)+(d.jc||0); e.rflip=d.fa||0; } }
   else if(d.t==='throw'){ if(e.alive && e.tomatoes>0) hostThrow(e); }
@@ -428,7 +379,7 @@ function showRoom(code){ $('start').style.display='none'; $('room').style.displa
   $('startBtn').style.display = net.host?'inline-block':'none'; $('roomNote').textContent = net.host?'':'Waiting for the host to start...'; renderLobby(); }
 function renderLobby(){ const box=$('plist'); box.innerHTML='';
   const list=[...net.lobby]; while(list.length<MAX_PLAYERS) list.push({bot:true, name:'Bot seat', color:'#555'});
-  for(const p of list){ const d=document.createElement('div'); d.className='pl'; d.innerHTML='<i style="background:'+p.color+'"></i>'+(p.bot?'<small>Bot seat</small>':'<span></span>'); if(!p.bot){ d.querySelector('span').textContent=p.name+(p.id==='p0'?' (host)':''); } box.appendChild(d); }
+  for(const p of list){ const d=document.createElement('div'); d.className='pl'; d.innerHTML='<i style="background:'+p.color+'"></i>'+(p.bot?'<small>Bot seat</small>':'<span></span>'); if(!p.bot){ d.querySelector('span').textContent=p.name+(p.id==='p0'?' (host)':'')+' · '+(BIKES[p.bike]||BIKES.scout).name; } box.appendChild(d); }
 }
 function leaveRoom(){ clearInterval(net.pingTimer); clearInterval(net.joinTimer); clearInterval(net.hbTimer); net.welcomed=false; closeNet();
   $('room').style.display='none'; $('start').style.display='flex'; $('hostBtn').disabled=$('joinBtn').disabled=false; }
@@ -440,7 +391,7 @@ function startMatch(seed, isHost, players, itemList, len){
   clearWorld(); setSeed(seed); buildObstacles(); G=newMatch(seed,isHost); paused=false; $('msgs').innerHTML='';
   $('room').style.display='none'; $('start').style.display='none'; $('over').style.display='none';
   const spots=[]; for(let i=0;i<MAX_PLAYERS;i++){ const a=i/MAX_PLAYERS*Math.PI*2; spots.push([Math.cos(a)*18, Math.sin(a)*18, a+Math.PI]); }
-  players.forEach((p,i)=>{ const s=spots[i]; makeEnt({id:p.id, name:p.name, color:p.color, hat:p.hat, bot:!!p.bot, x:s[0], z:s[1], heading:Math.atan2(-s[0],-s[1])+Math.PI}); });
+  players.forEach((p,i)=>{ const s=spots[i]; makeEnt({id:p.id, name:p.name, color:p.color, hat:p.hat, bike:p.bike||'scout', accent:p.accent||TRIMS[0], pattern:p.pattern||'solid', bot:!!p.bot, x:s[0], z:s[1], heading:Math.atan2(-s[0],-s[1])+Math.PI}); });
   G.localId = isHost ? 'p0' : net.myId;
   if(isHost){ for(let i=0;i<18;i++) hostSpawnItem('food', FOOD_KEYS[i%FOOD_KEYS.length]); hostSpawnItem('drink'); hostSpawnItem('drink'); hostSpawnItem('cherry'); for(let i=0;i<4;i++) hostSpawnItem('tomato');
     if(net.online) net.broadcast({t:'start', seed, players, len:matchLen, items:G.items.map(it=>({kind:it.kind,type:it.type,x:it.x,z:it.z}))}); }
@@ -450,7 +401,7 @@ function startMatch(seed, isHost, players, itemList, len){
 function buildPlayerList(){
   const used=new Set(net.lobby.map(p=>p.name)); const list=net.lobby.map(p=>Object.assign({},p));
   const names=BOT_NAMES.filter(n=>!used.has(n)); const hats=Object.keys(HATS);
-  for(let i=list.length;i<MAX_PLAYERS;i++) list.push({id:'b'+i, name:names[i%names.length], color:BIKE_COLORS[(i*3+1)%BIKE_COLORS.length], hat:hats[Math.floor(Math.random()*hats.length)], bot:true});
+  for(let i=list.length;i<MAX_PLAYERS;i++) list.push({id:'b'+i, name:names[i%names.length], color:BIKE_COLORS[(i*3+1)%BIKE_COLORS.length], hat:hats[Math.floor(Math.random()*hats.length)], bike:BIKE_KEYS[Math.floor(Math.random()*BIKE_KEYS.length)], accent:TRIMS[Math.floor(Math.random()*TRIMS.length)], pattern:Object.keys(PATTERNS)[Math.floor(Math.random()*5)], bot:true});
   return list;
 }
 function fireworks(){ const box=$('confetti'); box.style.display='block'; box.innerHTML=''; const cols=['#ff6ad5','#4df0e0','#ffe066','#7cff8a','#ffffff'];
@@ -612,7 +563,7 @@ $('resumeBtn').onclick=()=>{ paused=false; $('pause').style.display='none'; last
 function goFull(){ if(!isTouch) return; try{ const el=document.documentElement; const p=(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
 function saveMe(){ me.name=$('nameIn').value.trim()||'Rider'; try{ localStorage.setItem('speederRider', JSON.stringify(me)); }catch(e){} }
 let preview=null;
-function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike(me.color, me.hat, null, false); preview.position.set(0, terrainH(0,0)+0.9, 0); }
+function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike(Object.assign({}, mySpec(), {name:null})); preview.position.set(0, terrainH(0,0)+0.9, 0); }
 const BEST = { time:0, wins:0, races:0, hits:0, combos:0, ach:{} }; try{ Object.assign(BEST, JSON.parse(localStorage.getItem('speederBest2')||'{}')); }catch(e){}
 function saveBest(){ try{ localStorage.setItem('speederBest2', JSON.stringify(BEST)); }catch(e){} }
 function renderBests(){ $('bests').innerHTML = BEST.races ? '<span>Best run <b>'+BEST.time+'s</b></span><span>Wins <b>'+BEST.wins+'</b></span><span>Races <b>'+BEST.races+'</b></span><span>Tomato hits <b>'+BEST.hits+'</b></span>' : '<span>No races yet. Your records will show here.</span>'; }
@@ -636,9 +587,14 @@ function unlockAudio(){ if(SFX.ensure()){ SFX.startMusic(); SFX.setMood(0); } }
 (function initMenu(){
   $('nameIn').value = me.name || '';
   const sw=$('swatches'); BIKE_COLORS.forEach(c=>{ const b=document.createElement('button'); b.className='sw'+(c===me.color?' on':''); b.style.background=c; b.setAttribute('aria-label','Bike color '+c); b.onclick=()=>{ me.color=c; [...sw.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; sw.appendChild(b); });
+  const vb=$('vehicles'); const statBar=(v,max)=>'<i style="width:'+Math.round(v/max*100)+'%"></i>';
+  function renderVehicles(){ vb.innerHTML=''; for(const k of BIKE_KEYS){ const b=BIKES[k]; const d=document.createElement('button'); d.className='veh'+(k===me.bike?' on':''); d.innerHTML='<b></b><small></small><div class="st"><span>Speed'+statBar(b.speed,34)+'</span><span>Accel'+statBar(b.accel,44)+'</span><span>Turn'+statBar(b.turn,2.8)+'</span><span>Jump'+statBar(b.jump,18)+'</span></div>'; d.querySelector('b').textContent=b.name; d.querySelector('small').textContent=b.blurb; d.onclick=()=>{ me.bike=k; renderVehicles(); refreshPreview(); }; vb.appendChild(d); } }
+  renderVehicles();
+  const tb=$('trims'); TRIMS.forEach(c=>{ const b=document.createElement('button'); b.className='sw'+(c===me.accent?' on':''); b.style.background=c; b.setAttribute('aria-label','Trim color '+c); b.onclick=()=>{ me.accent=c; [...tb.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; tb.appendChild(b); });
+  const pb=$('patterns'); Object.entries(PATTERNS).forEach(([k,v])=>{ const b=document.createElement('button'); b.className='hat'+(k===me.pattern?' on':''); b.textContent=v; b.onclick=()=>{ me.pattern=k; [...pb.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; pb.appendChild(b); });
   const hb=$('hats'); Object.entries(HATS).forEach(([k,v])=>{ const b=document.createElement('button'); b.className='hat'+(k===me.hat?' on':''); b.textContent=v; b.onclick=()=>{ me.hat=k; [...hb.children].forEach(x=>x.classList.toggle('on', x===b)); refreshPreview(); }; hb.appendChild(b); });
   refreshPreview();
-  $('soloBtn').onclick=()=>{ saveMe(); goFull(); net.online=false; net.host=false; net.lobby=[{id:'p0', name:me.name, color:me.color, hat:me.hat}]; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
+  $('soloBtn').onclick=()=>{ saveMe(); goFull(); net.online=false; net.host=false; net.lobby=[Object.assign({id:'p0'}, mySpec())]; startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };
   $('hostBtn').onclick=()=>{ saveMe(); hostRoom(); };
   $('joinBtn').onclick=()=>{ saveMe(); const code=$('codeIn').value.trim().toUpperCase(); if(code.length!==4){ $('startErr').textContent='Enter the 4-letter room code.'; return; } joinRoom(code); };
   $('startBtn').onclick=()=>{ if(!net.host) return; goFull(); startMatch(Math.floor(Math.random()*1e9), true, buildPlayerList()); };

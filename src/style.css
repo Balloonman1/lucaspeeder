@@ -162,3 +162,12 @@ body.touch.portrait.playing #rotate{display:flex}
 #loadWrap{width:min(70vw,420px);height:8px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden}
 #loadBar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .2s}
 #loadTxt{font-size:11px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase}
+
+.vehicles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.veh{font-family:var(--body);letter-spacing:0;text-transform:none;text-align:left;background:rgba(255,255,255,.06);color:var(--fg);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.veh.on{border-color:var(--accent2);background:rgba(77,240,224,.14);box-shadow:0 0 0 1px var(--accent2) inset}
+.veh b{font-family:var(--display);font-size:13px;letter-spacing:.08em}
+.veh small{font-size:11px;color:var(--dim);line-height:1.35;min-height:2.7em}
+.veh .st{display:grid;gap:3px;margin-top:4px}
+.veh .st span{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:grid;grid-template-columns:38px 1fr;align-items:center;gap:6px}
+.veh .st i{display:block;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
