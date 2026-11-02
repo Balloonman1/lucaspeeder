@@ -18,14 +18,14 @@ Source: https://polyhaven.com/textures — License CC0.
 ## Models (Quaternius, Stylized Nature MegaKit, CC0) — public/assets/models
 | File | Triangles (approx.) | Used for |
 |---|---|---|
-| Rock_Medium_1/2/3.gltf | ~300 each | obstacle boulders (re-skinned with Poly Haven stone via triplanar material) |
-| Grass_Common_Short.gltf | ~60 | instanced grass clumps |
-| Bush_Common_Flowers.gltf | ~400 | instanced flowering bushes |
-| CommonTree_1.gltf, Pine_1.gltf | ~1.5k | instanced trees |
+| Rock_Medium_1/2/3.gltf.json | ~300 each | obstacle boulders (re-skinned with Poly Haven stone via triplanar material) |
+| Grass_Common_Short.gltf.json | ~60 | instanced grass clumps |
+| Bush_Common_Flowers.gltf.json | ~400 | instanced flowering bushes |
+| CommonTree_1.gltf.json, Pine_1.gltf.json | ~1.5k | instanced trees |
 Source: https://quaternius.com — License CC0.
 
 ## HDRI (Poly Haven, CC0) — public/assets/hdri
-kiara_1_dawn_1k.hdr (image-based lighting / reflections), venice_sunset_1k.hdr (spare).
+kiara_1_dawn_1k.hdr (image-based lighting / reflections) with a tone-mapped .jpg fallback for hosts that do not serve .hdr. Model buffers are embedded in the .gltf.json files for the same reason.
 
 ## Still procedural (no suitable free asset reachable from this environment)
 - Hover bike and rider (built from primitives with PBR materials). Replace with a GLB when one is available.

@@ -15,11 +15,12 @@ export const TEXSETS = {
   cliff:  { diff:'rock_face_03_diff', nor:'rock_face_03_nor_gl', arm:'rock_face_03_arm' },
   grass:  { diff:'forrest_ground_01_diff', nor:'forrest_ground_01_nor_gl', arm:'forrest_ground_01_arm' },
 };
+// glTF JSON with embedded buffers (served as .json so any static host, including artifact hosting, accepts it)
 export const MODELS = {
-  rock1:'Rock_Medium_1.gltf', rock2:'Rock_Medium_2.gltf', rock3:'Rock_Medium_3.gltf',
-  grass:'Grass_Common_Short.gltf', flowers:'Bush_Common_Flowers.gltf', tree:'CommonTree_1.gltf', pine:'Pine_1.gltf',
+  rock1:'Rock_Medium_1.gltf.json', rock2:'Rock_Medium_2.gltf.json', rock3:'Rock_Medium_3.gltf.json',
+  grass:'Grass_Common_Short.gltf.json', flowers:'Bush_Common_Flowers.gltf.json', tree:'CommonTree_1.gltf.json', pine:'Pine_1.gltf.json',
 };
-export const HDRI = 'kiara_1_dawn_1k.hdr';
+export const HDRI = 'kiara_1_dawn_1k';
 
 export const A = { tex:{}, models:{}, hdri:null, ready:false };
 
@@ -51,7 +52,9 @@ export async function loadAll(onProgress) {
   jobs.push(loadTex('rock_boulder_dry_diff', true).then(t => { A.tex.boulder = { diff: t }; tick(); }));
   jobs.push(loadTex('rock_boulder_dry_rough', false).then(t => { A.tex.boulder.rough = t; tick(); }));
   for (const [k, file] of Object.entries(MODELS)) jobs.push(loadGltf(file).then(s => { A.models[k] = s; tick(); }));
-  jobs.push(new Promise((res, rej) => rgbeLoader.load(url('hdri/' + HDRI), t => { t.mapping = T.EquirectangularReflectionMapping; A.hdri = t; tick(); res(); }, undefined, rej)));
+  // true HDR when the host serves .hdr; otherwise a tone-mapped JPG equirect of the same sky
+  jobs.push(new Promise(res => rgbeLoader.load(url('hdri/' + HDRI + '.hdr'), t => { t.mapping = T.EquirectangularReflectionMapping; A.hdri = t; tick(); res(); }, undefined,
+    () => texLoader.load(url('hdri/' + HDRI + '.jpg'), t => { t.mapping = T.EquirectangularReflectionMapping; t.colorSpace = T.SRGBColorSpace; A.hdri = t; tick(); res(); }, undefined, () => { tick(); res(); }))));
   await Promise.all(jobs);
   A.ready = true;
   return A;
