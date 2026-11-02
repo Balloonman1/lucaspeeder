@@ -4,26 +4,16 @@ import * as T from 'three';
 import { WORLD, HALF, smooth, vnoise, settings } from './config.js';
 import { A } from './assets.js';
 import { scene } from './engine.js';
+import { level } from './levels.js';
 
-// trails: winding main trail east-west, a north-south trail and a diagonal; terrain is carved along them
-const TRAILS = [
-  (x, z) => Math.abs(z - 70 * Math.sin(x * 0.011) - 10),
-  (x, z) => Math.abs(x - 80 * Math.sin(z * 0.013) + 30),
-  (x, z) => Math.abs((z - x * 0.6) - 50 * Math.sin((x + z) * 0.009) + 60),
-];
-export function trailDist(x, z) { let d = 1e9; for (const f of TRAILS) d = Math.min(d, f(x, z)); return d; }
-export function terrainH(x, z) {
-  const roll = 2.2 * Math.sin(x * 0.03) * Math.cos(z * 0.026) + 1.1 * Math.sin(x * 0.08 + z * 0.06) + 0.5 * Math.sin(z * 0.15) * Math.cos(x * 0.12) + (vnoise(x * 0.05, z * 0.05) - 0.5) * 1.2;
-  const r = Math.max(Math.abs(x), Math.abs(z)) / HALF;
-  const rim = smooth(0.78, 1.0, r) * 22 + smooth(0.9, 1.0, r) * 18;
-  const td = trailDist(x, z); const carve = -1.4 * smooth(11, 3, td) - 0.5 * Math.exp(-Math.pow(td / 4, 2));
-  return roll + rim + carve;
-}
+// Trails/roads and heights come from the active level (levels.js).
+export function trailDist(x, z) { let d = 1e9; for (const f of level.trails) d = Math.min(d, f(x, z)); return d; }
+export function trailIndex(x, z) { let d = 1e9, idx = 0; level.trails.forEach((f, i) => { const v = f(x, z); if (v < d) { d = v; idx = i; } }); return idx; }
+export function terrainH(x, z) { return level.height(x, z, trailDist(x, z)); }
 export function terrainSlope(x, z) { return Math.hypot(terrainH(x + 2, z) - terrainH(x - 2, z), terrainH(x, z + 2) - terrainH(x, z - 2)) / 4; }
 
 // ---- splat material: MeshStandardMaterial with four texture sets blended by a per-vertex weight ----
-function makeSplatMaterial() {
-  const sets = [A.tex.trail, A.tex.grass, A.tex.rocks, A.tex.cliff];
+function makeSplatMaterial(sets) {
   const m = new T.MeshStandardMaterial({ map: sets[0].diff, normalMap: sets[0].nor, roughnessMap: sets[0].arm, aoMap: sets[0].arm, roughness: 1, metalness: 0, vertexColors: true });
   m.normalScale.set(1.2, 1.2);
   const u = {};
@@ -43,37 +33,30 @@ function makeSplatMaterial() {
       .replace('float ambientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;', 'float ambientOcclusion = ( splat4(tArm0,tArm1,tArm2,tArm3, vAoMapUv).r - 1.0 ) * aoMapIntensity + 1.0;')
       .replace('vec3 mapN = texture2D( normalMap, vNormalMapUv ).xyz * 2.0 - 1.0;', 'vec3 mapN = splat4(tNor0,tNor1,tNor2,tNor3, vNormalMapUv).xyz * 2.0 - 1.0;');
   };
-  m.customProgramCacheKey = () => 'splat';
+  m.customProgramCacheKey = () => 'splat' + level.id;
   return m;
 }
 
-export let ground = null, cliffRing = null;
+export let ground = null;
 export function buildTerrain() {
+  if (ground) { scene.remove(ground); ground.geometry.dispose(); ground.material.dispose(); ground = null; }
   const seg = 180;
   const g = new T.PlaneGeometry(WORLD, WORLD, seg, seg); g.rotateX(-Math.PI / 2);
   const p = g.attributes.position, uv = g.attributes.uv, cols = [], splat = [];
-  const tint = new T.Color(), warm = new T.Color(0xf0e2cc), cool = new T.Color(0xcfd6c6);
-  const TILE = 1 / 4.5; // texture repeats every 4.5 m
+  const tint = new T.Color(), tA = new T.Color(level.tint[0]), tB = new T.Color(level.tint[1]);
+  const TILE = 1 / level.tileM;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i), h = terrainH(x, z); p.setY(i, h);
-    uv.setXY(i, x * TILE, z * TILE);
-    const slope = terrainSlope(x, z), td = trailDist(x, z), trail = Math.exp(-Math.pow(td / 7.5, 2));
-    const n = vnoise(x * 0.03 + 50, z * 0.03 + 50), n2 = vnoise(x * 0.11 + 7, z * 0.11 + 3);
-    let wTrail = smooth(0.2, 0.85, trail) + smooth(0.05, 0.25, trail) * 0.45;          // packed dirt and its worn shoulders
-    let wCliff = smooth(0.35, 0.9, slope) + smooth(7, 18, h);                            // steep ground and valley walls
-    let wRocks = smooth(0.58, 0.8, n) * 0.75 + smooth(0.2, 0.45, slope) * 0.4 + smooth(0.02, 0.12, trail) * smooth(0.3, 0.0, trail) * 0.6; // stony patches and trail shoulders
-    let wGrass = 1.0;
-    const sum = wTrail + wCliff + wRocks + wGrass;
-    // normalize with priority: cliff and trail dominate where they are strong
-    const wT = wTrail, wC = Math.min(1, wCliff), wR = wRocks * (1 - wT) * (1 - wC), wG = Math.max(0, 1 - wT - wC - wR);
-    splat.push(wT, wG, wR, wC);
-    tint.copy(n2 > 0.5 ? warm : cool).lerp(new T.Color(0xffffff), 0.55); cols.push(tint.r, tint.g, tint.b);
+    if (level.roadUV && trailIndex(x, z) === 1) uv.setXY(i, z * TILE, x * TILE); else uv.setXY(i, x * TILE, z * TILE);
+    const slope = terrainSlope(x, z), td = trailDist(x, z);
+    const w = level.weights(x, z, h, slope, td); splat.push(w[0], w[1], w[2], w[3]);
+    const n2 = vnoise(x * 0.11 + 7, z * 0.11 + 3); tint.copy(n2 > 0.5 ? tA : tB).lerp(new T.Color(0xffffff), 0.55); cols.push(tint.r, tint.g, tint.b);
   }
   g.setAttribute('color', new T.Float32BufferAttribute(cols, 3));
   g.setAttribute('aSplat', new T.Float32BufferAttribute(splat, 4));
-  g.setAttribute('uv1', g.attributes.uv); // aoMap uses uv1
+  g.setAttribute('uv1', g.attributes.uv);
   g.computeVertexNormals();
-  ground = new T.Mesh(g, makeSplatMaterial()); ground.receiveShadow = true; ground.name = 'ground'; scene.add(ground);
+  ground = new T.Mesh(g, makeSplatMaterial(level.layers())); ground.receiveShadow = true; ground.name = 'ground'; scene.add(ground);
   return ground;
 }
 
