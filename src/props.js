@@ -81,9 +81,13 @@ export function buildObstacles() {
   obstacles = []; const M = materials();
   const rockModels = [A.models.rock1, A.models.rock2, A.models.rock3].map(firstGeometry).filter(Boolean);
   const place = (minR, extraOk) => { for (let k = 0; k < 60; k++) { const x = srange(-HALF + 15, HALF - 15), z = srange(-HALF + 15, HALF - 15); if (Math.hypot(x, z) < 28) continue; if (extraOk && !extraOk(x, z)) continue; if (obstacles.every(o => Math.hypot(o.x - x, o.z - z) > o.r + minR + 4)) return [x, z]; } return null; };
-  const pushRock = (p, r, matA, matB, seed) => { let m; if (rockModels.length && srand() < 0.6) { const g = rockModels[Math.floor(srand() * rockModels.length)]; m = new T.Mesh(g, srand() < .5 ? matA : matB); g.computeBoundingSphere(); const k = r / g.boundingSphere.radius; m.scale.set(k, k * srange(.8, 1.1), k); }
-    else { m = new T.Mesh(rockGeo(seed), srand() < .5 ? matA : matB); m.scale.set(r, r * srange(.7, 1.1), r); }
-    m.rotation.set(0, srange(0, 6.28), 0); m.position.set(p[0], terrainH(p[0], p[1]) + r * 0.15, p[1]); shadowify(m); world.add(m); obstacles.push({ x: p[0], z: p[1], r: r * 0.95, h: Math.min(r * 1.3, 3.2) }); };
+  // Every player must draw exactly the same seeded numbers here, whether or not the rock models finished
+  // loading on their device. If the count differs, every obstacle after it lands somewhere else on that
+  // player's map and the others see them drive through rocks.
+  const pushRock = (p, r, matA, matB, seed) => { const useModel = srand() < 0.6, pick = srand(), matPick = srand() < .5, sy = srand(), rot = srange(0, 6.28); let m;
+    if (useModel && rockModels.length) { const g = rockModels[Math.floor(pick * rockModels.length)]; m = new T.Mesh(g, matPick ? matA : matB); g.computeBoundingSphere(); const k = r / g.boundingSphere.radius; m.scale.set(k, k * (.8 + sy * .3), k); }
+    else { m = new T.Mesh(rockGeo(seed), matPick ? matA : matB); m.scale.set(r, r * (.7 + sy * .4), r); }
+    m.rotation.set(0, rot, 0); m.position.set(p[0], terrainH(p[0], p[1]) + r * 0.15, p[1]); shadowify(m); world.add(m); obstacles.push({ x: p[0], z: p[1], r: r * 0.95, h: Math.min(r * 1.3, 3.2) }); };
   const pylon = (p, stoneMat, baseMat, i) => { const h = srange(14, 24); const g = new T.Group();
     const stone = new T.Mesh(displace(new T.CylinderGeometry(1.4, 2.8, h, 8, 6), 0.25, 0.3, i * 23), stoneMat); stone.position.y = h / 2; g.add(stone);
     const ring = new T.Mesh(new T.TorusGeometry(2.2, .12, 8, 24), M.glow); ring.rotation.x = Math.PI / 2; ring.position.y = h * 0.8; g.add(ring);
@@ -111,7 +115,7 @@ export function buildObstacles() {
     const n = Math.floor(HALF * 2 / BLOCK);
     for (let bx = -n / 2; bx < n / 2; bx++) for (let bz = -n / 2; bz < n / 2; bz++) { const cx = bx * BLOCK, cz = bz * BLOCK; if (inPark(cx, cz) || Math.abs(cx) > HALF - 30 || Math.abs(cz) > HALF - 30) continue; if (Math.hypot(cx, cz) < 40) continue;
       const w = 18 + srand() * 10, d = 18 + srand() * 10, h = 20 + srand() * 60; const b = buildingMesh(w, d, h, M, Math.floor(srand() * 1000)); b.position.set(cx, terrainH(cx, cz) - 0.3, cz); shadowify(b); world.add(b);
-      obstacles.push({ x: cx, z: cz, r: Math.max(w, d) * 0.62 + 0.6, h: 99, building: true }); }
+      obstacles.push({ x: cx, z: cz, r: Math.max(w, d) * 0.62 + 0.6, h: 99, building: true, hw: w / 2, hd: d / 2 }); } // hw/hd: real box footprint for collision
     const car = (x, z, rot, i) => { const g = new T.Group(); const body = new T.Mesh(new T.BoxGeometry(2.0, .7, 4.4), M.taxi); body.position.y = .75; g.add(body); const cab = new T.Mesh(new T.BoxGeometry(1.8, .6, 2.2), M.carGlass); cab.position.set(0, 1.4, -.2); g.add(cab);
       const sign = new T.Mesh(new T.BoxGeometry(.9, .25, .4), M.lamp); sign.position.set(0, 1.82, -.2); g.add(sign); for (const sx of [-1, 1]) for (const sz of [-1.4, 1.4]) { const t = new T.Mesh(new T.CylinderGeometry(.38, .38, .3, 12), M.tire); t.rotation.z = Math.PI / 2; t.position.set(sx * 1.0, .4, sz); g.add(t); }
       g.position.set(x, terrainH(x, z), z); g.rotation.y = rot; shadowify(g); world.add(g); obstacles.push({ x, z, r: 2.2, h: 2.0 }); };

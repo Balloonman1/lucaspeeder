@@ -75,8 +75,11 @@ export async function loadAll(onProgress) {
 }
 
 // Pull the first mesh geometry out of a loaded glTF scene (our models are single-mesh props).
+// A model that failed or timed out on a slow connection is undefined. Returning null here lets the game fall
+// back to procedural rocks; throwing used to abort the course build and leave that player with no obstacles.
 export function firstGeometry(scene) {
+  if (!scene) return null;
   let geo = null; scene.traverse(o => { if (!geo && o.isMesh) geo = o.geometry; });
   return geo;
 }
-export function allMeshes(scene) { const out = []; scene.traverse(o => { if (o.isMesh) out.push(o); }); return out; }
+export function allMeshes(scene) { const out = []; if (!scene) return out; scene.traverse(o => { if (o.isMesh) out.push(o); }); return out; }

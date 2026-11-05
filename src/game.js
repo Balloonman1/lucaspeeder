@@ -1,7 +1,7 @@
 // Gameplay: riders, items, physics, bots, host simulation, networking, HUD and menus.
 // Rendering lives in engine.js / sky.js / terrain.js / props.js; this module drives them.
 import * as T from 'three';
-import { WORLD, HALF, MAX_PLAYERS, DAY_LEN, BIKE_COLORS, HATS, BOT_NAMES, QUALITY, settings, isTouch, $, rand, setSeed } from './config.js';
+import { WORLD, HALF, MAX_PLAYERS, DAY_LEN, BIKE_COLORS, HATS, BOT_NAMES, QUALITY, settings, isPhone, canTouch, $, rand, setSeed } from './config.js';
 import { A } from './assets.js';
 import { renderer, scene, camera, sun, world, env, renderFrame, applyQualityToEngine } from './engine.js';
 import { updateSky, sunDir, setupEnvironment } from './sky.js';
@@ -195,14 +195,29 @@ function movePhysics(e, inp, dt){
   if(!grounded){ e.airT=(e.airT||0)+dt; }
   if(e.flipping){ const st=e.flipStart||0; const total = Math.max(0.6, 2*19/24 - st); e.flipA = Math.min(1, ((e.airT||0)-st)/total); if(grounded && e.airT>0.2){ e.flipping=false; e.flipA=0; e.flipStart=0; } }
   e.vy -= 24*dt; e.y += e.vy*dt; if(e.y<0){ e.y=0; e.vy=0; }
-  e.x += Math.sin(e.heading)*e.speed*dt; e.z += Math.cos(e.heading)*e.speed*dt;
-  const lim=HALF-10;
-  if(Math.abs(e.x)>lim||Math.abs(e.z)>lim){ e.x=T.MathUtils.clamp(e.x,-lim,lim); e.z=T.MathUtils.clamp(e.z,-lim,lim); e.speed*=-0.3; if(e.id===G.localId && e.hitCd<=0){ showMsg('Edge of the scan zone. Turn back.','bad'); e.hitCd=1; } }
+  // Move in short steps (max 0.8 m each) so a fast or boosted bike on a slow computer can't skip
+  // straight past a lamp post or hydrant between two frames.
+  const sx=Math.sin(e.heading), sz=Math.cos(e.heading), lim=HALF-10;
+  const steps=Math.max(1, Math.ceil(Math.abs(e.speed)*dt/0.8)), sdt=dt/steps; let bounced=false;
+  for(let s=0; s<steps; s++){
+    e.x += sx*e.speed*sdt; e.z += sz*e.speed*sdt;
+    if(Math.abs(e.x)>lim||Math.abs(e.z)>lim){ e.x=T.MathUtils.clamp(e.x,-lim,lim); e.z=T.MathUtils.clamp(e.z,-lim,lim); if(!bounced){ e.speed*=-0.3; bounced=true; } if(e.id===G.localId && e.hitCd<=0){ showMsg('Edge of the scan zone. Turn back.','bad'); e.hitCd=1; } }
+    for(const o of obstacles){ const dx=e.x-o.x, dz=e.z-o.z, d=Math.hypot(dx,dz)||0.01;
+      if(d<o.r+1.2 && e.y>=o.h && o.h<90 && e.jumpedOver && !e.jumpedOver[o.x]){ e.jumpedOver[o.x]=1; e.closeCalls=(e.closeCalls||0)+1; if(e.id===G.localId){ announce('CLOSE CALL!','good','+3 energy'); SFX.play('close'); spawnFX(e.x, terrainH(e.x,e.z)+o.h, e.z, 0x7cff8a, 10, {speed:4, up:2, size:.4, gravity:-4}); } }
+      if(e.y>=o.h) continue;
+      const out=pushOut(o, e.x, e.z, 1.2); if(!out) continue;
+      e.x=out.x; e.z=out.z; if(!bounced){ e.speed*=-0.45; bounced=true; }
+      if(e.hitCd<=0){ e.hitCd=.6; e.crashes++; spawnFX(e.x, terrainH(e.x,e.z)+1, e.z, 0xffc266, 18, {speed:9, up:3, size:.35}); if(e.id===G.localId){ flash(); FX.shake=1.2; SFX.play('crash'); showMsg('Crash! -8 energy','bad'); } } }
+  }
   if(e.hitCd>0) e.hitCd-=dt;
-  for(const o of obstacles){ const dx=e.x-o.x, dz=e.z-o.z, d=Math.hypot(dx,dz)||0.01; const rr=o.r+1.2;
-    if(d<rr && e.y>=o.h && o.h<90 && e.jumpedOver && !e.jumpedOver[o.x]){ e.jumpedOver[o.x]=1; e.closeCalls=(e.closeCalls||0)+1; if(e.id===G.localId){ announce('CLOSE CALL!','good','+3 energy'); SFX.play('close'); spawnFX(e.x, terrainH(e.x,e.z)+o.h, e.z, 0x7cff8a, 10, {speed:4, up:2, size:.4, gravity:-4}); } }
-    if(d<rr && e.y<o.h){ e.x=o.x+dx/d*rr; e.z=o.z+dz/d*rr; e.speed*=-0.45;
-      if(e.hitCd<=0){ e.hitCd=.6; e.crashes++; spawnFX(e.x, terrainH(e.x,e.z)+1, e.z, 0xffc266, 18, {speed:9, up:3, size:.35}); if(e.id===G.localId){ flash(); FX.shake=1.2; SFX.play('crash'); showMsg('Crash! -8 energy','bad'); } } } }
+}
+// Where a rider at (x,z) with radius `pad` must be moved to stop overlapping obstacle o, or null if clear.
+// Buildings use their real rectangle; everything else is round.
+function pushOut(o, x, z, pad){
+  const dx=x-o.x, dz=z-o.z;
+  if(o.hw){ const ex=o.hw+pad, ez=o.hd+pad; if(Math.abs(dx)>=ex || Math.abs(dz)>=ez) return null;
+    return (ex-Math.abs(dx) < ez-Math.abs(dz)) ? {x:o.x+(dx<0?-ex:ex), z} : {x, z:o.z+(dz<0?-ez:ez)}; }
+  const d=Math.hypot(dx,dz)||0.01, rr=o.r+pad; if(d>=rr) return null; return {x:o.x+dx/d*rr, z:o.z+dz/d*rr};
 }
 // ---------- bot / clone AI ----------
 function nearestItem(x,z,pred){ let b=null, bd=1e9; for(const it of G.items){ if(!it.alive||!pred(it)) continue; const d=Math.hypot(it.x-x,it.z-z); if(d<bd){bd=d;b=it;} } return [b,bd]; }
@@ -224,7 +239,7 @@ function botUpdate(e, dt){
   e.speed += (maxS - e.speed)*Math.min(1, 1.5*dt); if(Math.abs(diff)>1.2) e.speed *= 0.97;
   e.x += Math.sin(e.heading)*e.speed*dt; e.z += Math.cos(e.heading)*e.speed*dt;
   e.x = T.MathUtils.clamp(e.x,-HALF+8,HALF-8); e.z = T.MathUtils.clamp(e.z,-HALF+8,HALF-8);
-  for(const o of obstacles){ const dx=e.x-o.x, dz=e.z-o.z, d=Math.hypot(dx,dz)||0.01; if(d<o.r+1.1){ e.x=o.x+dx/d*(o.r+1.1); e.z=o.z+dz/d*(o.r+1.1); e.speed*=0.5; } }
+  for(const o of obstacles){ const out=pushOut(o, e.x, e.z, 1.1); if(out){ e.x=out.x; e.z=out.z; e.speed*=0.5; } }
   e.lean += (-turn/dt*0.12 - e.lean)*Math.min(1,6*dt);
   // bots throw tomatoes at whoever is close
   if(!e.clone && e.tomatoes>0){ e.throwCd-=dt; if(e.throwCd<=0){ e.throwCd=rand(2,5); if(Math.random()<0.5) hostThrow(e); } }
@@ -291,7 +306,9 @@ function hostSim(dt){
 }
 function keys2input(){
   const j=jumpReq.jump, fl=jumpReq.flip; jumpReq.jump=false; jumpReq.flip=false;
-  if(isTouch) return {fwd:!touch.brake, back:touch.brake, turn:touch.steer, jump:j, flip:fl};
+  // keyboard always works; touch steering is used only in touch mode and only while no driving key is held
+  const kbHeld = DRIVE_KEYS.some(k=>keys[k]);
+  if(touchMode && !kbHeld) return {fwd:!touch.brake, back:touch.brake, turn:touch.steer, jump:j, flip:fl};
   return {fwd:keys['w']||keys['arrowup'], back:keys['s']||keys['arrowdown'], left:keys['a']||keys['arrowleft'], right:keys['d']||keys['arrowright'], jump:j, flip:fl}; }
 
 // ---------- snapshots ----------
@@ -348,7 +365,7 @@ function hostRoom(){
     showRoom(code);
     net.pingTimer = setInterval(()=>{ // drop riders who went quiet
       const now=performance.now(); for(const id in net.seen){ if(now-net.seen[id]>9000){ delete net.seen[id]; net.lobby=net.lobby.filter(p=>p.id!==id);
-        if(G && G.ents[id] && G.ents[id].alive){ G.ents[id].alive=false; msg(G.ents[id].name+' lost connection','bad','all'); } else renderLobby(); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } }
+        if(G && G.ents[id] && G.ents[id].alive){ G.ents[id].alive=false; G.ents[id].lost=true; msg(G.ents[id].name+' lost connection','bad','all'); } else renderLobby(); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); } }
       if(!G) net.broadcast({t:'lobby', players:net.lobby, code:net.code, level:me.level});
     }, 2000);
   });
@@ -374,7 +391,12 @@ function hostOnMsg(d){
   if(d.t==='join'){ if(net.lobby.some(p=>p.id===id)){ net.sendTo(id,{t:'welcome', id, code:net.code}); return; }
     if(net.lobby.length>=MAX_PLAYERS || G){ net.sendTo(id,{t:'full'}); return; }
     net.lobby.push({id, name:(d.name||'Rider').slice(0,14), color:d.color, hat:d.hat, bike:BIKES[d.bike]?d.bike:'scout', accent:d.accent||TRIMS[0], pattern:PATTERNS[d.pattern]?d.pattern:'solid'}); net.sendTo(id,{t:'welcome', id, code:net.code}); net.broadcast({t:'lobby', players:net.lobby, code:net.code}); renderLobby(); return; }
+  // a guest the host stopped hearing from (tab in the background, relay hiccup) gets put back in the lobby
+  if(!G && d.t==='hb' && !net.lobby.some(p=>p.id===id)){ net.sendTo(id,{t:'rejoin'}); return; }
   if(!G) return; const e=G.ents[id]; if(!e) return;
+  // ...or, mid-race, gets their rider back instead of staying frozen out for the rest of the race
+  if(e.lost && e.energy>0 && !G.over){ e.lost=false; e.alive=true; msg(e.name+' reconnected','good','all');
+    if(!net.lobby.some(p=>p.id===id)) net.lobby.push({id, name:e.name, color:e.color, hat:e.hat, bike:e.bike, accent:e.accent, pattern:e.pattern}); }
   if(d.t==='in'){ if(e.alive){ e.x=e.tx=d.x; e.z=e.tz=d.z; e.y=e.ty=d.y; e.heading=e.th=d.h; e.speed=d.s; e.lean=d.l; e.crashes+=d.cr||0; e.closeCalls=(e.closeCalls||0)+(d.cc||0); e.jumpCost=(e.jumpCost||0)+(d.jc||0); e.rflip=d.fa||0; } }
   else if(d.t==='throw'){ if(e.alive && e.tomatoes>0) hostThrow(e); }
   else if(d.t==='take'){ const it=G.items[d.i]; if(e.alive && it && it.alive && Math.hypot(it.x-e.x,it.z-e.z)<14) hostPickup(e, it); }
@@ -383,7 +405,9 @@ function clientOnMsg(d){
   if(d.t==='welcome'){ net.welcomed=true; $('startErr').textContent=''; showRoom(d.code||net.code); }
   else if(d.t==='full'){ if(!net.welcomed) peerFail({type:'room is full or already racing'}); }
   else if(d.t==='lobby'){ if(!net.welcomed) return; net.lobby=d.players; if(d.level && LEVELS[d.level]){ me.level=d.level; } if(!G) showRoom(d.code||net.code); renderLobby(); }
-  else if(d.t==='start'){ if(net.welcomed){ net.lastSnap=performance.now(); startMatch(d.seed, false, d.players, d.items, d.len, d.level); } }
+  else if(d.t==='rejoin'){ if(net.welcomed && !G) net.sendHost(Object.assign({t:'join'}, mySpec())); }
+  else if(d.t==='start'){ if(net.welcomed){ net.lastSnap=performance.now(); startMatch(d.seed, false, d.players, d.items, d.len, d.level);
+      if(!d.players.some(p=>p.id===net.myId)){ G.spectate=null; announce('WATCHING THIS RACE','bad','Your connection dropped before the start. You will be in the next race.'); } } }
   else if(d.t==='snap'){ if(G){ net.lastSnap=performance.now(); applySnapshot(d, G.localId); } }
   else if(d.t==='over'){ if(G){ G.over=true; G.standings=d.standings; showOver(); } }
 }
@@ -403,6 +427,8 @@ function clearWorld(){ while(world.children.length) world.remove(world.children[
 function startMatch(seed, isHost, players, itemList, len, levelId){
   if(len) matchLen=len; applyLevel(levelId || me.level || 'canyon');
   clearWorld(); setSeed(seed); buildObstacles(); G=newMatch(seed,isHost); paused=false; $('msgs').innerHTML='';
+  // drop focus from the menu button or name box so Space and WASD drive the bike instead of pressing that button or typing
+  try{ if(document.activeElement && document.activeElement!==document.body) document.activeElement.blur(); }catch(e){} clearKeys();
   $('room').style.display='none'; $('start').style.display='none'; $('over').style.display='none';
   const spots=[]; for(let i=0;i<MAX_PLAYERS;i++){ const a=i/MAX_PLAYERS*Math.PI*2; spots.push([Math.cos(a)*18, Math.sin(a)*18, a+Math.PI]); }
   players.forEach((p,i)=>{ const s=spots[i]; makeEnt({id:p.id, name:p.name, color:p.color, hat:p.hat, bike:p.bike||'scout', accent:p.accent||TRIMS[0], pattern:p.pattern||'solid', bot:!!p.bot, x:s[0], z:s[1], heading:Math.atan2(-s[0],-s[1])+Math.PI}); });
@@ -486,7 +512,7 @@ function updateHUD(e){
   const clock=(level.startClock+G.t/DAY_LEN)%1; updateSky(clock);
   const phase = clock<0.2?'🌙 Night':clock<0.3?'🌅 Sunrise':clock<0.45?'☀ Morning':clock<0.55?'☀ Noon':clock<0.7?'☀ Afternoon':clock<0.8?'🌇 Sunset':'🌙 Night';
   $('clock').textContent = phase+' · day '+(Math.floor(G.t/DAY_LEN+level.startClock)+1);
-  if(isTouch){ const tb=$('tomBtn'); tb.disabled = !(e.id===G.localId && e.alive && e.tomatoes>0); const h=$('thint'); h.style.opacity = G.t<8 ? 1 : 0; }
+  if(touchMode){ const tb=$('tomBtn'); tb.disabled = !(e.id===G.localId && e.alive && e.tomatoes>0); const h=$('thint'); h.style.opacity = G.t<8 ? 1 : 0; }
   const lowE = e.id===G.localId && e.alive && e.energy<22; $('lowE').classList.toggle('show', lowE); if(lowE && !G.lowWarned){ G.lowWarned=true; announce('LOW ENERGY!','bad','find food fast'); SFX.play('warn'); } if(e.energy>35) G.lowWarned=false;
   SFX.engineState(Math.min(1,Math.abs(e.speed)/28), e.boost>0, G.running && !paused);
   SFX.setMood(G.t>G.len-60 || aliveRiders().length<=3 ? 2 : 1);
@@ -537,7 +563,12 @@ function frame(now){
 
 // ---------- touch controls: left half = steering pad, right half = tap to jump / hold to brake ----------
 const touch = { steer:0, brake:false, jump:false, hintT:0 };
-if(isTouch){ document.body.classList.add('touch'); $('touchTip').style.display='block';
+// Touch mode starts on for phones/tablets. On a touchscreen laptop it turns on only when the screen is
+// actually touched, and pressing a driving key switches back to keyboard mode.
+let touchMode = false;
+function setTouchMode(on){ if(touchMode===on) return; touchMode=on; document.body.classList.toggle('touch', on); $('touchTip').style.display = on?'block':'none';
+  if(!on){ touch.steer=0; touch.brake=false; } }
+if(canTouch){ setTouchMode(isPhone); addEventListener('touchstart', ()=>setTouchMode(true), {passive:true, capture:true});
   const tz=$('touch'), stick=$('stick'), knob=$('knob'), fx=$('tapfx'), zl=$('zl');
   let lt=null; // left touch {id,x0}
   let rt=null; // right touch {id,t0,x,y,braking}
@@ -565,17 +596,22 @@ function pressKey(k){ if(!G || !G.running) return;
 // ---------- input ----------
 let lastJumpTap=0; const jumpReq={jump:false, flip:false};
 function requestJump(){ const now=performance.now(); if(now-lastJumpTap<420) jumpReq.flip=true; jumpReq.jump=true; lastJumpTap=now; }
+const DRIVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
 addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); keys[k]=true; if(k===' ' && !e.repeat && G && G.running) requestJump();
+  if(DRIVE_KEYS.includes(k) && G) setTouchMode(false);
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k) && G) e.preventDefault();
   if(!G || !G.running) return;
   if(k==='p' && !net.online){ paused=!paused; $('pause').style.display=paused?'flex':'none'; if(!paused) lastFrame=performance.now(); }
   if(k==='f'||k==='tab') pressKey(k);
   if(k==='escape'){ const me2=G.ents[G.localId]; if(!me2 || !me2.alive || G.over) $('exitBtn').click(); } });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+// a key released while the window is in the background never sends keyup, which leaves the bike stuck
+function clearKeys(){ for(const k in keys) keys[k]=false; }
+addEventListener('blur', clearKeys); document.addEventListener('visibilitychange', ()=>{ if(document.hidden) clearKeys(); });
 $('resumeBtn').onclick=()=>{ paused=false; $('pause').style.display='none'; lastFrame=performance.now(); };
 
 // ---------- menus ----------
-function goFull(){ if(!isTouch) return; try{ const el=document.documentElement; const p=(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+function goFull(){ if(!touchMode) return; try{ const el=document.documentElement; const p=(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
 function saveMe(){ me.name=$('nameIn').value.trim()||'Rider'; try{ localStorage.setItem('speederRider', JSON.stringify(me)); }catch(e){} }
 let preview=null;
 function refreshPreview(){ if(preview) world.remove(preview); preview = makeBike(Object.assign({}, mySpec(), {name:null})); preview.position.set(0, terrainH(0,0)+0.9, 0); }
@@ -628,7 +664,7 @@ function unlockAudio(){ if(SFX.ensure()){ SFX.startMusic(); SFX.setMood(0); } }
 })();
 camera.position.set(0,6,-12); camera.lookAt(0,1,0);
 requestAnimationFrame(frame);
-window.__sf = { FOODS, world, camera, terrainH, buildDrink, buildCherry, buildTomato, get G(){ return G; } };
+window.__sf = { FOODS, world, camera, terrainH, buildDrink, buildCherry, buildTomato, get G(){ return G; }, get obstacles(){ return obstacles; } };
 window.__applyLevel = ()=>{ applyLevel(me.level||'canyon'); refreshPreview(); };
 
 }

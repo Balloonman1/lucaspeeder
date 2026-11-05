@@ -26,7 +26,10 @@ try {
   settings.qualityName = QUALITY[saved] ? saved : (coarse ? 'medium' : 'high');
 } catch (e) {}
 
-export const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+// isPhone: the main pointer is a finger (phones, tablets). canTouch: any touchscreen at all, including
+// touchscreen laptops and Chromebooks, which still have a keyboard and must keep keyboard controls.
+export const isPhone = matchMedia('(pointer:coarse)').matches;
+export const canTouch = isPhone || 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
 export const $ = id => document.getElementById(id);
 export const rand = (a, b) => a + Math.random() * (b - a);
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
